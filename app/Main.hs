@@ -1,50 +1,94 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
+import Control.Applicative
 import Control.Monad.State.Lazy
+import Data.Functor
 import Data.Text (Text)
 import Data.Text.IO qualified as T
 import Text.Pandoc
 
--- type Front = Text
-
-data Card = Card [Inline] [Block]
+data Front
+  = SimpleFront [Inline]
+  | ExtendedFront [Inline] [Block]
   deriving (Show)
 
--- type Deck = [Card]
+type Back = [Block]
+
+data Card
+  = SimpleCard Front Back
+  | ExtendedCard Front Back
+  deriving (Show)
 
 textToAst :: Text -> IO Pandoc
 textToAst txt = do
   runIOorExplode $
     readMarkdown def {readerExtensions = pandocExtensions} txt
 
-temp :: StateT [Block] IO [Block]
-temp = do
-  get >>= \case
-    [] -> return []
-    (x : xs) -> do
-      case x of
-        (Header 1 _ _) -> do
-          put (x : xs)
+constructCardBody :: StateT [Block] Maybe [Block]
+constructCardBody =
+  ( do
+      peek >>= \case
+        Header 1 _ _ -> do
+          return []
+        Para [Str ".", Space, Str ".", Space, Str "."] -> do
           return []
         _ -> do
-          put xs
-          rest <- temp
+          x <- pop
+          rest <- constructCardBody
           return $ x : rest
+  )
+    <|> return []
 
-cardConstructor :: StateT [Block] IO Card
-cardConstructor = do
-  tem <- get
-  let x = head tem
-  put $ tail tem
-  case x of
-    (Header 1 _ c) -> do
-      Card c <$> temp
-    _ -> undefined
+peek :: StateT [a] Maybe a
+peek =
+  get >>= \case
+    [] -> lift Nothing
+    (x : _) -> return x
+
+pop :: StateT [a] Maybe a
+pop =
+  get >>= \case
+    [] -> lift Nothing
+    (x : xs) -> (put xs $> x)
+
+isEmpty :: StateT [a] Maybe Bool
+isEmpty =
+  get >>= \case
+    [] -> return True
+    _ -> return False
+
+constructCards :: StateT [Block] Maybe [Card]
+constructCards =
+  pop >>= \case
+    Header 1 _ c ->
+      constructCardBody >>= \body ->
+        ( peek
+            >>= ( \case
+                    Para [Str ".", Space, Str ".", Space, Str "."] -> pop *> (ExtendedCard (ExtendedFront c body) <$> constructCardBody)
+                    Header 1 _ _ -> return (SimpleCard (SimpleFront c) body)
+                    _ -> error "Incorrect syntax error msg tbd"
+                )
+            >>= \card ->
+              tryConstructCards
+                >>= \cards -> return $ card : cards
+        )
+          <|> return [SimpleCard (SimpleFront c) body]
+    x -> error $ "Incorrect syntax on line with text: " ++ show x
+
+try :: StateT [Block] Maybe a -> a -> StateT [Block] Maybe a
+try m x = m <|> return x
+
+tryConstructCards :: StateT [Block] Maybe [Card]
+tryConstructCards = try constructCards []
 
 main :: IO ()
 main = do
   (Pandoc _ blocks) <- T.getContents >>= textToAst
-  (a, b) <- runStateT cardConstructor blocks
-  print a
+  let (cards, blocks') = case runStateT tryConstructCards blocks of
+        Just x -> x
+        Nothing -> error "Incorrect syntax"
+  print ("Remaining blocks: " :: String) *> print blocks'
+  print cards
   return ()
