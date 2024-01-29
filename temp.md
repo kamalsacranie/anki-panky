@@ -5,8 +5,12 @@ deck: Name of the deck
 
 # Front of the card can be heading
 
+::: {#test}
+
 This will be the back of the card with some $\sum_{1}^{2}$. It should also
 support footnote^[This is a footnote.] and nested lists:
+
+:::
 
 - First item
   - Second level

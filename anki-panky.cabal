@@ -67,12 +67,13 @@ executable anki-panky
         CardParser.Parser
         CardParser.SimpleCard
         Types
+        Temp
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    mtl, text, pandoc-types, pandoc, base ^>=4.17.2.0
+    build-depends:   unordered-containers, bytestring, base-compat, aeson, sqlite-simple, blaze-html, mtl, text, pandoc-types, pandoc, base ^>=4.17.2.0
 
     -- Directories containing source files.
     hs-source-dirs:   app

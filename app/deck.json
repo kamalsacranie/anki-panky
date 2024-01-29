@@ -1,0 +1,28 @@
+{
+    "collapsed": false,
+    "conf": 1,
+    "desc": "test deck description",
+    "dyn": 0,
+    "extendNew": 0,
+    "extendRev": 50,
+    "id": 1,
+    "lrnToday": [
+        163,
+        2
+    ],
+    "mod": 1425278051,
+    "name": "This is the cards name",
+    "newToday": [
+        163,
+        2
+    ],
+    "revToday": [
+        163,
+        0
+    ],
+    "timeToday": [
+        163,
+        23598
+    ],
+    "usn": -1
+}
