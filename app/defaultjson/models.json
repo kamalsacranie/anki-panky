@@ -1,0 +1,68 @@
+{
+    "1691663570": {
+        "css": "",
+        "did": 1288033183,
+        "flds": [
+            {
+                "name": "Question",
+                "ord": 0,
+                "font": "Liberation Sans",
+                "media": [],
+                "rtl": false,
+                "size": 20,
+                "sticky": false
+            },
+            {
+                "name": "Answer",
+                "ord": 1,
+                "font": "Liberation Sans",
+                "media": [],
+                "rtl": false,
+                "size": 20,
+                "sticky": false
+            },
+            {
+                "name": "Guid",
+                "ord": 2,
+                "font": "Liberation Sans",
+                "media": [],
+                "rtl": false,
+                "size": 20,
+                "sticky": false
+            }
+        ],
+        "id": "1691663570",
+        "latexPost": "",
+        "latexPre": "",
+        "latexsvg": false,
+        "mod": 1706664369,
+        "name": "test model",
+        "req": [
+            [
+                0,
+                "all",
+                [
+                    0
+                ]
+            ]
+        ],
+        "sortf": 0,
+        "tags": [],
+        "tmpls": [
+            {
+                "name": "Card 1",
+                "qfmt": "<div class=\"card\"><div class=\"question\">{{Question}}</div></div>",
+                "afmt": "<div class=\"card\"><div class=\"question\">{{Question}}</div><hr><div class=\"answer\">{{Answer}}</div></div>",
+                "ord": 0,
+                "bafmt": "",
+                "bqfmt": "",
+                "bfont": "",
+                "bsize": 0,
+                "did": null
+            }
+        ],
+        "type": 0,
+        "usn": -1,
+        "vers": []
+    }
+}

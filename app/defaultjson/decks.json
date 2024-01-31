@@ -1,0 +1,58 @@
+{
+    "1": {
+        "collapsed": false,
+        "conf": 1,
+        "desc": "",
+        "dyn": 0,
+        "extendNew": 10,
+        "extendRev": 50,
+        "id": 1,
+        "lrnToday": [
+            0,
+            0
+        ],
+        "mod": 1425279151,
+        "name": "Default",
+        "newToday": [
+            0,
+            0
+        ],
+        "revToday": [
+            0,
+            0
+        ],
+        "timeToday": [
+            0,
+            0
+        ],
+        "usn": 0
+    },
+    "1288033183": {
+        "collapsed": false,
+        "conf": 1,
+        "desc": "",
+        "dyn": 0,
+        "extendNew": 0,
+        "extendRev": 50,
+        "id": 1288033183,
+        "lrnToday": [
+            163,
+            2
+        ],
+        "mod": 1425278051,
+        "name": "mdankitest",
+        "newToday": [
+            163,
+            2
+        ],
+        "revToday": [
+            163,
+            0
+        ],
+        "timeToday": [
+            163,
+            23598
+        ],
+        "usn": -1
+    }
+}

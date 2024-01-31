@@ -73,7 +73,19 @@ executable anki-panky
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:   unordered-containers, bytestring, base-compat, aeson, sqlite-simple, blaze-html, mtl, text, pandoc-types, pandoc, base ^>=4.17.2.0
+    build-depends:  
+        zip-archive,
+        unordered-containers,
+        bytestring,
+        base-compat,
+        aeson,
+        sqlite-simple,
+        blaze-html,
+        mtl,
+        text,
+        pandoc-types,
+        pandoc,
+        base ^>=4.17.2.0
 
     -- Directories containing source files.
     hs-source-dirs:   app
