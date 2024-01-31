@@ -4,14 +4,18 @@
 import CardParser.ExtCard (extendedCard)
 import CardParser.Parser
 import CardParser.SimpleCard
+import Codec.Archive.Zip
 import Control.Applicative
 import Control.Monad (when)
+import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
 import Data.Text qualified as T
 import Data.Text.IO qualified as IOT
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Directory (doesFileExist, removeFile)
-import Text.Pandoc
+import Text.Pandoc hiding (getPOSIXTime)
 import Types.Anki as A
 import Types.Parser as P
 
@@ -123,6 +127,16 @@ main = do
       }
 
   close conn
+
+  entry <-
+    toEntry
+      "collection.anki2"
+      . round
+      <$> getPOSIXTime
+      <*> BS.readFile "./collection.anki2"
+  let archive = addEntryToArchive entry emptyArchive
+  let archiveName = "test.apkg"
+  BS.writeFile archiveName $ fromArchive archive
   return ()
 
 -- [[decksJSON :: TT.Text]] <- query_ conn (Query "SELECT decks FROM col")
@@ -134,9 +148,3 @@ main = do
 
 -- [[modelsJSON :: TT.Text]] <- query_ conn (Query "SELECT models FROM col")
 -- execute conn (Query "UPDATE col SET models = ?") (Only modelsJSON)
-
--- temp <- B.readFile "./temp.db"
--- let entry = toEntry "collection.anki2" 0 temp
--- let arch' = emptyArchive
--- let arch = addEntryToArchive entry arch'
--- B.writeFile "test.apkg" (fromArchive arch)
