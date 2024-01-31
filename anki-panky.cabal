@@ -66,8 +66,8 @@ executable anki-panky
         CardParser.ExtCard
         CardParser.Parser
         CardParser.SimpleCard
-        Types
-        Temp
+        Types.Anki
+        Types.Parser
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -75,7 +75,7 @@ executable anki-panky
     -- Other library packages from which modules are imported.
     build-depends:  
         zip-archive,
-        unordered-containers,
+        directory,
         bytestring,
         base-compat,
         aeson,

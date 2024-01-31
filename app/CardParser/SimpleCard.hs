@@ -2,10 +2,9 @@
 
 module CardParser.SimpleCard where
 
-import CardParser.Parser
 import CardParser.Utils
 import Text.Pandoc
-import Types
+import Types.Parser
 
 cardSimpleFront :: Parser Front
 cardSimpleFront = do

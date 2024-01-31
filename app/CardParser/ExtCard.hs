@@ -3,12 +3,11 @@
 
 module CardParser.ExtCard where
 
-import CardParser.Parser
 import CardParser.Utils
 import Control.Applicative
 import Data.Functor
 import Text.Pandoc
-import Types
+import Types.Parser
 
 anonFront :: Parser Block
 anonFront = satisfyExactBlock HorizontalRule

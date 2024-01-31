@@ -6,7 +6,7 @@ module CardParser.Utils where
 import CardParser.Parser
 import Control.Applicative
 import Text.Pandoc
-import Types
+import Types.Parser
 
 satisfyBlock :: (Block -> Bool) -> Parser Block
 satisfyBlock f = do
