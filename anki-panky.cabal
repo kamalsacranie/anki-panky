@@ -68,6 +68,7 @@ executable anki-panky
         CardParser.SimpleCard
         Types.Anki
         Types.Parser
+        ColGen.Utils
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -75,6 +76,7 @@ executable anki-panky
     -- Other library packages from which modules are imported.
     build-depends:  
         time,
+        random,
         zip-archive,
         directory,
         bytestring,

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -11,10 +12,13 @@ import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
 import Data.Text qualified as T
 import Data.Text.IO qualified as IOT
-import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Directory (doesFileExist, removeFile)
+import System.Directory.Internal.Prelude (getArgs)
+import System.Random
+import Text.Blaze.Html (Html)
+import Text.Blaze.Html.Renderer.Pretty (renderHtml)
 import Text.Pandoc hiding (getPOSIXTime)
 import Types.Anki as A
 import Types.Parser as P
@@ -27,31 +31,48 @@ textToAst txt = do
 cards :: Parser [P.Card]
 cards = many (extendedCard <|> simpleCard)
 
-pandocPart = do
-  (Pandoc meta blocks) <- IOT.getContents >>= textToAst
+documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc)]
+documenttizeDeck document =
+  map
+    ( \case
+        (P.Card (SimpleFront f) fv) -> (document [f], document fv)
+        (P.Card (ExtendedFront f) fv) -> (document f, document fv)
+    )
+
+writeFlashCardHtml :: (PandocMonad m) => Pandoc -> m Html
+writeFlashCardHtml =
+  writeHtml5
+    ( def
+        { writerExtensions = pandocExtensions,
+          writerHTMLMathMethod = MathJax defaultMathJaxURL
+        }
+    )
+
+renderDeck :: [(Pandoc, Pandoc)] -> [(String, String)]
+renderDeck =
+  map
+    ( \(f, b) -> case (writeFlashCardHtml f, writeFlashCardHtml b) of
+        (Right front, Right back) -> (renderHtml front, renderHtml back)
+        _ -> error "Fucked it"
+    )
+
+-- | Returns a list of tuples which contain rendered HTML for the front and
+-- | back of the cards provided in the order that they appeared
+pandocPart :: T.Text -> IO [(String, String)]
+pandocPart input = do
+  (Pandoc meta blocks) <- textToAst input
   let deck = concat $ parseAll cards blocks
-      (front, back) = case head deck of
-        (P.Card (SimpleFront f) fv) -> (Pandoc meta [f], Pandoc meta fv)
-        (P.Card (ExtendedFront f) fv) -> (Pandoc meta f, Pandoc meta fv)
-  _ <- runIO $ writeHtml5 def {writerExtensions = pandocExtensions, writerHTMLMathMethod = MathJax defaultMathJaxURL} front
-  _ <- runIO $ writeHtml5 def {writerExtensions = pandocExtensions, writerHTMLMathMethod = MathJax defaultMathJaxURL} back
-  return ()
+  let docDeck = documenttizeDeck (Pandoc meta) deck
+  let renderedDeck = renderDeck docDeck
+  return renderedDeck
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists filePath = do
   exists <- doesFileExist filePath
   when exists $ removeFile filePath
 
-main :: IO ()
-main = do
-  -- a <- getArgs
-  -- -- if our args list is empty
-  -- input <-
-  --   if null a
-  --     then IOT.getContents
-  --     else return $ T.pack (head a)
-  -- pandocPart
-
+dbStuff :: [(String, String)] -> IO ()
+dbStuff deck = do
   let dbPath = "collection.anki2"
   removeIfExists dbPath
   conn <- open dbPath
@@ -65,6 +86,8 @@ main = do
   colModels <- IOT.readFile "./app/defaultjson/models.json"
   colDecks <- IOT.readFile "./app/defaultjson/decks.json"
   colDConf <- IOT.readFile "./app/defaultjson/dconf.json"
+
+  -------- Default sestup
 
   execute
     conn
@@ -85,23 +108,31 @@ main = do
         tagsCol = "{}"
       }
 
+  ---------
+  let (front, back) = undefined
+
+  gen <- getStdGen
+  let randomInt :: Int
+      randomInt = fst $ random gen
+
   execute
     conn
     "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
     A.Note
       { idNote = 1706664369114,
-        guidNote = "MlOX*&baDU",
+        guidNote = T.pack $ show randomInt,
         midNote = 1691663570,
         modNote = 1706664369,
         usnNote = -1,
         tagsNote = "",
-        fldsNote = T.pack ("This is the front" ++ [chr 0x1f] ++ "This is the back" ++ [chr 0x1f] ++ "MlOX*&baDU"),
+        fldsNote = T.pack (front ++ [chr 0x1f] ++ back ++ [chr 0x1f] ++ show randomInt),
         sfldNote = T.pack "<h2>This is the front</h2>",
         csumNote = 0,
         flagsNote = 0,
         dataNote = ""
       }
 
+  t <- round . (* 1000) <$> getPOSIXTime :: IO Int
   execute
     conn
     "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
@@ -137,6 +168,18 @@ main = do
   let archive = addEntryToArchive entry emptyArchive
   let archiveName = "test.apkg"
   BS.writeFile archiveName $ fromArchive archive
+
+main :: IO ()
+main = do
+  a <- getArgs
+  -- if our args list is empty
+  input <-
+    if null a
+      then IOT.getContents
+      else return $ T.pack (head a)
+  renderedCards <- pandocPart input
+
+  dbStuff renderedCards
   return ()
 
 -- [[decksJSON :: TT.Text]] <- query_ conn (Query "SELECT decks FROM col")
