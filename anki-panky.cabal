@@ -68,7 +68,9 @@ executable anki-panky
         CardParser.SimpleCard
         Types.Anki
         Types.Parser
-        ColGen.Utils
+        Collection.Generate
+        Collection.Utils
+        Constructor
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
