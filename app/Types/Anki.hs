@@ -5,9 +5,16 @@ module Types.Anki where
 
 import Data.Aeson
 import Data.Aeson.KeyMap (KeyMap)
-import Data.Text (Text)
+import Data.Text as T
 import Database.SQLite.Simple (FromRow, ToRow)
-import GHC.Generics (Generic)
+import GHC.Generics
+
+data DeckGenInfo = DGInfo
+  { deckName :: String,
+    filePath :: String,
+    deckFileName :: String
+  }
+  deriving (Show)
 
 data Col = Col
   { idCol :: !Int,
@@ -66,22 +73,22 @@ data Card = Card
 --------- JSON DEFINITIONS -----------------------------------------------------
 
 dropSuffix :: String -> String -> String
-dropSuffix suffix str = take (length str - length suffix) str
+dropSuffix suffix str = Prelude.take (Prelude.length str - Prelude.length suffix) str
 
 deckSuffix :: String
 deckSuffix = "Deck"
 
 data Deck = Deck
   { collapsedDeck :: Bool,
-    confDeck :: Int,
+    confDeck :: Maybe Int,
     descDeck :: String,
     dynDeck :: Int,
     extendNewDeck :: Int,
     extendRevDeck :: Int,
-    idDeck :: Int,
+    idDeck :: Maybe Int,
     lrnTodayDeck :: [Int],
-    modDeck :: Int,
-    nameDeck :: String,
+    modDeck :: Maybe Int,
+    nameDeck :: Maybe String,
     newTodayDeck :: [Int],
     revTodayDeck :: [Int],
     timeTodayDeck :: [Int],
@@ -98,21 +105,22 @@ instance FromJSON Deck where
 -- This is how we denote an arbitrary key to value json object
 type Decks = KeyMap Deck
 
+-- Figure out how to apply a function to all the fields of a record
 data Model = Model
-  { cssModel :: String,
-    didModel :: Int,
+  { cssModel :: Maybe T.Text,
+    didModel :: Maybe Int,
     fldsModel :: [Field],
-    idModel :: String,
-    latexPostModel :: String,
-    latexPreModel :: String,
+    idModel :: Maybe T.Text,
+    latexPostModel :: Maybe T.Text,
+    latexPreModel :: Maybe T.Text,
     latexsvgModel :: Bool,
-    modModel :: Int,
+    modModel :: Maybe Int,
     nameModel :: String,
-    reqModel :: [(Int, String, [Int])], -- not really used anymore and CBA to implement for backward compat
+    reqModel :: [(Int, String, [Int])],
     sortfModel :: Int,
     tagsModel :: [String],
     tmplsModel :: [Template],
-    typeModel :: Int,
+    typeModel :: Maybe Int,
     usnModel :: Int,
     versModel :: [Int]
   }
@@ -161,3 +169,26 @@ instance ToJSON Template where
 
 instance FromJSON Template where
   parseJSON = genericParseJSON $ defaultOptions {fieldLabelModifier = dropSuffix "Template"}
+
+data Conf = Conf
+  { activeDecksConf :: [Int],
+    addToCurConf :: Bool,
+    collapseTimeConf :: Int,
+    curDeckConf :: Int,
+    curModelConf :: Maybe T.Text,
+    dueCountsConf :: Bool,
+    estTimesConf :: Bool,
+    newBuryConf :: Bool,
+    newSpreadConf :: Int,
+    nextPosConf :: Int,
+    sortBackwardsConf :: Bool,
+    sortTypeConf :: String,
+    timeLimConf :: Int
+  }
+  deriving (Show, Generic)
+
+instance ToJSON Conf where
+  toJSON = genericToJSON $ defaultOptions {fieldLabelModifier = dropSuffix "Conf"}
+
+instance FromJSON Conf where
+  parseJSON = genericParseJSON $ defaultOptions {fieldLabelModifier = dropSuffix "Conf"}

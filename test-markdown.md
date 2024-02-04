@@ -1,6 +1,5 @@
 ---
-title: Title of the sub-deck 
-deck: Name of the deck
+name: name of deck/subdeck
 ---
 
 # Front of the card can be heading

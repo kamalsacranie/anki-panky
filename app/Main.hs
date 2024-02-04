@@ -4,9 +4,10 @@
 import Collection.Generate
 import Constructor (produceDeck)
 import Data.Maybe (catMaybes)
-import Data.Text (pack)
-import Data.Text.IO qualified as T (getContents)
+import Data.Text.IO qualified as T (readFile)
 import System.Environment (getArgs)
+import System.FilePath (takeBaseName)
+import Types.Anki
 
 data Opt
   = PlacehodlerOpt
@@ -34,10 +35,16 @@ main = do
   let inputFiles = [file | File file <- args]
   let _ = [opt | Opt opt <- args]
 
-  input <-
-    if null args
-      then T.getContents
-      else return $ pack (head inputFiles)
+  -- in single file operation, the name of the file is the name of the deck
+
+  -- probably going to want to use a state monad right
+  let genInfo =
+        DGInfo
+          { filePath = head inputFiles,
+            deckFileName = takeBaseName (filePath genInfo),
+            deckName = takeBaseName (filePath genInfo)
+          }
+  input <- T.readFile (filePath genInfo)
   renderedCards <- produceDeck input
 
-  generateCollection renderedCards
+  generateCollection renderedCards genInfo

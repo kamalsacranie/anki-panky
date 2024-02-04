@@ -4,14 +4,16 @@ module Collection.Generate where
 
 import Codec.Archive.Zip
 import Collection.Utils
-import Data.Aeson (decodeStrictText)
-import Data.Aeson.Key (toText)
-import Data.Aeson.KeyMap (keys)
+import Data.Aeson (decodeFileStrict)
+import Data.Aeson.Key
+import Data.Aeson.KeyMap (fromList, keys)
+import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
 import Data.Maybe (fromJust)
 import Data.Text qualified as T
 import Data.Text.IO qualified as IOT
+import Data.Text.Lazy qualified as TL
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Random
@@ -50,7 +52,7 @@ addCard modelId conn front back = do
     A.Card
       { idCard = cardId,
         nidCard = noteId,
-        didCard = 1288033183,
+        didCard = 100,
         ordCard = 0,
         modCard = cardId, -- time the card was modified
         usnCard = -1,
@@ -68,47 +70,88 @@ addCard modelId conn front back = do
         dataCard = ""
       }
 
-setupCollectionDb :: Connection -> IO [Int]
-setupCollectionDb conn = do
+setupCollectionDb :: Connection -> DeckGenInfo -> IO [Int]
+setupCollectionDb conn genInfo = do
   queries <- IOT.readFile "./app/setup-migrations.sql"
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
   mapM_ (execute_ conn . Query) queryString
-  colConf <- IOT.readFile "./app/defaultjson/conf.json"
-  colModels <- IOT.readFile "./app/defaultjson/models.json"
-  colDecks <- IOT.readFile "./app/defaultjson/decks.json"
+  colConfDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/conf.json" :: IO (Maybe Conf))
+  colModelDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/models.json" :: IO (Maybe Model))
+  colDeckDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/deck.json" :: IO (Maybe Deck))
   colDConf <- IOT.readFile "./app/defaultjson/dconf.json"
+  cssDefault <- IOT.readFile "./app/defaultjson/card.css"
+  latexPre <- IOT.readFile "./app/defaultjson/preamble.tex"
+  latexPost <- IOT.readFile "./app/defaultjson/postamble.tex"
+
+  currTime <- getPOSIXTime
+  let miliEpoc = floor $ currTime * 1000 :: Int
+      secEpoc = floor currTime :: Int
+
+  let deckId = 100
+  -- Keeping at one now as this is for the default deck. But i'm not sure what
+  -- that meanas. Perhaps we should not have the default deck at all?
+  let colDecks =
+        fromList
+          [ ( fromText $ T.pack (show deckId),
+              colDeckDefault
+                { confDeck = Just 1,
+                  idDeck = Just deckId,
+                  modDeck = Just miliEpoc,
+                  nameDeck = Just (deckName genInfo)
+                }
+            )
+          ] ::
+          Decks
+
+  let modelId = T.pack $ show miliEpoc
+  let colModels =
+        fromList
+          [ ( fromText modelId,
+              colModelDefault
+                { cssModel = Just cssDefault,
+                  didModel = Just deckId,
+                  idModel = Just modelId,
+                  latexPreModel = Just latexPre,
+                  latexPostModel = Just latexPost,
+                  modModel = Just secEpoc,
+                  typeModel = Just 0
+                }
+            )
+          ] ::
+          Models
+
+  let modelKeyTexts = toText <$> keys colModels
+      modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
+  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts)}
 
   execute
     conn
     (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
     Col
-      { idCol = 1,
-        crtCol = 1411124400,
-        modCol = 1425279151694,
-        scmCol = 1425279151690,
-        verCol = 11,
-        dtyCol = 0,
+      { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
+        crtCol = secEpoc, -- created in seconds
+        modCol = miliEpoc, -- modified in miliseconds
+        scmCol = miliEpoc, -- schema modified in miliseconds
+        verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
+        dtyCol = 0, -- All collections generated will be clean
         usnCol = 0,
-        lsCol = 0,
-        confCol = colConf,
-        modelsCol = colModels,
-        decksCol = colDecks,
+        lsCol = 0, -- last sync time, not important for a new deck
+        confCol = TL.toStrict $ encodeToLazyText colConf, -- config
+        modelsCol = TL.toStrict $ encodeToLazyText colModels,
+        decksCol = TL.toStrict $ encodeToLazyText colDecks,
         dconfCol = colDConf,
-        tagsCol = "{}"
+        tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
       }
-
-  let colModelsObj = fromJust (decodeStrictText colModels :: Maybe Models)
-      modelKeys = map (\x -> read (T.unpack (toText x)) :: Int) $ keys colModelsObj
   return modelKeys
 
 dbPath :: FilePath
-dbPath = "collection.anki2"
+dbPath = "collection.anki2" -- required name for the anki db
 
-writeDbToApkg :: IO ()
-writeDbToApkg = do
+writeDbToApkg :: DeckGenInfo -> IO ()
+writeDbToApkg genInfo = do
   let archivePath = "collection.anki2"
   entry <-
     toEntry
@@ -117,14 +160,14 @@ writeDbToApkg = do
       <$> getPOSIXTime
       <*> BS.readFile dbPath
   let archive = addEntryToArchive entry emptyArchive
-      archiveName = "test.apkg"
+      archiveName = deckFileName genInfo <> ".apkg"
   BS.writeFile archiveName $ fromArchive archive
 
-generateCollection :: [(T.Text, T.Text)] -> IO ()
-generateCollection deck = do
+generateCollection :: [(T.Text, T.Text)] -> DeckGenInfo -> IO ()
+generateCollection deck genInfo = do
   removeIfExists dbPath
   conn <- open dbPath
-  modelKeys <- setupCollectionDb conn
+  modelKeys <- setupCollectionDb conn genInfo
   mapM_ (uncurry (addCard (head modelKeys) conn)) deck
   close conn
-  writeDbToApkg
+  writeDbToApkg genInfo
