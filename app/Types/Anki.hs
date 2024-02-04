@@ -3,6 +3,7 @@
 
 module Types.Anki where
 
+import Control.Monad.State.Lazy (StateT)
 import Data.Aeson
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Text as T
@@ -10,7 +11,7 @@ import Database.SQLite.Simple (FromRow, ToRow)
 import GHC.Generics
 
 data DeckGenInfo = DGInfo
-  { deckName :: String,
+  { deckName :: T.Text,
     filePath :: String,
     deckFileName :: String
   }
@@ -78,6 +79,8 @@ dropSuffix suffix str = Prelude.take (Prelude.length str - Prelude.length suffix
 deckSuffix :: String
 deckSuffix = "Deck"
 
+type Panky a = StateT DeckGenInfo IO a
+
 data Deck = Deck
   { collapsedDeck :: Bool,
     confDeck :: Maybe Int,
@@ -88,7 +91,7 @@ data Deck = Deck
     idDeck :: Maybe Int,
     lrnTodayDeck :: [Int],
     modDeck :: Maybe Int,
-    nameDeck :: Maybe String,
+    nameDeck :: Maybe T.Text,
     newTodayDeck :: [Int],
     revTodayDeck :: [Int],
     timeTodayDeck :: [Int],

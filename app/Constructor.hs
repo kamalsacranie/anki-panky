@@ -7,8 +7,12 @@ import CardParser.ExtCard (extendedCard)
 import CardParser.Parser
 import CardParser.SimpleCard
 import Control.Applicative
+import Control.Monad.Cont (MonadIO (liftIO))
+import Control.Monad.State (modify)
+import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Text.Pandoc hiding (getPOSIXTime)
+import Types.Anki
 import Types.Parser as P
 
 textToAst :: T.Text -> IO Pandoc
@@ -47,9 +51,28 @@ cards = many (extendedCard <|> simpleCard)
 
 -- | Returns a list of tuples which contain rendered HTML for the front and
 -- | back of the cards provided in the order that they appeared
-produceDeck :: T.Text -> IO [(T.Text, T.Text)]
+produceDeck :: T.Text -> Panky [(T.Text, T.Text)]
 produceDeck input = do
-  (Pandoc meta blocks) <- textToAst input
+  (Pandoc meta blocks) <- liftIO (textToAst input)
+  let documentName = lookupMeta "name" meta
+  modify
+    ( \st -> case documentName of
+        Nothing -> st
+        Just name -> st {deckName = fromMaybe (deckName st) (metaValueToText name)}
+    )
   let deck = concat $ parseAll cards blocks
-  let docDeck = documenttizeDeck (Pandoc meta) deck
-  renderDeck docDeck
+      docDeck = documenttizeDeck (Pandoc meta) deck
+  liftIO (renderDeck docDeck)
+
+metaValueToText :: MetaValue -> Maybe T.Text
+metaValueToText (MetaString s) = pure s
+metaValueToText (MetaInlines i) = renderMeta [Para i]
+metaValueToText (MetaBlocks b) = renderMeta b
+metaValueToText _ = Nothing
+
+renderMeta :: [Block] -> Maybe T.Text
+renderMeta metaValue =
+  let plainTextMeta = runPure $ writePlain def (Pandoc nullMeta metaValue)
+   in case plainTextMeta of
+        Left _ -> Nothing
+        Right res -> Just (T.dropEnd 1 res)

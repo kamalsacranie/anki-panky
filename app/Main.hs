@@ -3,7 +3,9 @@
 
 import Collection.Generate
 import Constructor (produceDeck)
+import Control.Monad.State.Lazy (StateT (runStateT))
 import Data.Maybe (catMaybes)
+import Data.Text (pack)
 import Data.Text.IO qualified as T (readFile)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName)
@@ -42,9 +44,9 @@ main = do
         DGInfo
           { filePath = head inputFiles,
             deckFileName = takeBaseName (filePath genInfo),
-            deckName = takeBaseName (filePath genInfo)
+            deckName = pack $ takeBaseName (filePath genInfo)
           }
   input <- T.readFile (filePath genInfo)
-  renderedCards <- produceDeck input
+  (renderedCards, genInfoPostProd) <- runStateT (produceDeck input) genInfo
 
-  generateCollection renderedCards genInfo
+  generateCollection renderedCards genInfoPostProd
