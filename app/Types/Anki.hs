@@ -175,7 +175,7 @@ instance FromJSON Template where
   parseJSON = genericParseJSON $ defaultOptions {fieldLabelModifier = dropSuffix "Template"}
 
 data Conf = Conf
-  { activeDecksConf :: [Int],
+  { activeDecksConf :: Maybe [Int],
     addToCurConf :: Bool,
     collapseTimeConf :: Int,
     curDeckConf :: Int,

@@ -39,7 +39,6 @@ main = do
 
   -- in single file operation, the name of the file is the name of the deck
 
-  -- probably going to want to use a state monad right
   let genInfo =
         DGInfo
           { filePath = head inputFiles,

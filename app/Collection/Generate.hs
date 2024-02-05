@@ -4,11 +4,11 @@ module Collection.Generate where
 
 import Codec.Archive.Zip
 import Collection.Utils
-import Control.Monad.Cont (MonadIO (liftIO), foldM, foldM_)
+import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (StateT (runStateT), gets, modify)
 import Data.Aeson (decodeFileStrict)
 import Data.Aeson.Key
-import Data.Aeson.KeyMap (fromList, keys)
+import Data.Aeson.KeyMap qualified as AK (fromList, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
@@ -21,57 +21,58 @@ import Database.SQLite.Simple
 import System.Random
 import Types.Anki as A
 
-addCard :: Int -> Int -> Connection -> T.Text -> T.Text -> IO ()
-addCard dId modelId conn front back = do
+addCard :: Int -> Connection -> (T.Text, T.Text) -> Panky ()
+addCard modelId conn (front, back) = do
   gen <- getStdGen
   let noteGUID :: Int
       noteGUID = fst $ random gen
 
   -- technically these should be miliseconds but its not fast enought
-  currentTime <- getPOSIXTime
-  let noteId = floor (currentTime * 10000) :: Int
-  execute
-    conn
-    "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-    A.Note
-      { idNote = noteId,
-        guidNote = T.pack $ show noteGUID,
-        midNote = modelId,
-        modNote = noteId,
-        usnNote = -1,
-        tagsNote = "",
-        fldsNote = front <> T.singleton (chr 0x1f) <> back <> T.singleton (chr 0x1f) <> T.pack (show noteGUID),
-        sfldNote = front,
-        csumNote = 0,
-        flagsNote = 0,
-        dataNote = ""
-      }
+  noteId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
+  liftIO $
+    execute
+      conn
+      "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+      A.Note
+        { idNote = noteId,
+          guidNote = T.pack $ show noteGUID,
+          midNote = modelId,
+          modNote = noteId,
+          usnNote = -1,
+          tagsNote = "",
+          fldsNote = front <> T.singleton (chr 0x1f) <> back <> T.singleton (chr 0x1f) <> T.pack (show noteGUID),
+          sfldNote = front,
+          csumNote = 0,
+          flagsNote = 0,
+          dataNote = ""
+        }
 
-  currentTime' <- getPOSIXTime
-  let cardId = floor (currentTime' * 10000) :: Int
-  execute
-    conn
-    "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-    A.Card
-      { idCard = cardId,
-        nidCard = noteId,
-        didCard = dId,
-        ordCard = 0,
-        modCard = cardId, -- time the card was modified
-        usnCard = -1,
-        typeCard = 0,
-        queueCard = 0,
-        dueCard = 0,
-        ivlCard = 0,
-        factorCard = 0,
-        repsCard = 0,
-        lapsesCard = 0,
-        leftCard = 0,
-        odueCard = 0,
-        odidCard = 0,
-        flagsCard = 0,
-        dataCard = ""
-      }
+  cardId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
+  dId <- gets (fromMaybe (error "No deck ID present while adding cards to deck.") . deckId)
+  liftIO $
+    execute
+      conn
+      "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      A.Card
+        { idCard = cardId,
+          nidCard = noteId,
+          didCard = dId,
+          ordCard = 0,
+          modCard = cardId, -- time the card was modified
+          usnCard = -1,
+          typeCard = 0,
+          queueCard = 0,
+          dueCard = 0,
+          ivlCard = 0,
+          factorCard = 0,
+          repsCard = 0,
+          lapsesCard = 0,
+          leftCard = 0,
+          odueCard = 0,
+          odidCard = 0,
+          flagsCard = 0,
+          dataCard = ""
+        }
 
 setupCollectionDb :: Connection -> Panky [Int]
 setupCollectionDb conn = do
@@ -81,6 +82,7 @@ setupCollectionDb conn = do
         ("" : xs) -> reverse xs
         commands -> reverse commands
   mapM_ (liftIO . (execute_ conn . Query)) queryString
+
   colConfDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/conf.json" :: IO (Maybe Conf))
   colModelDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/models.json" :: IO (Maybe Model))
   colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/deck.json" :: IO (Maybe Deck))
@@ -99,7 +101,7 @@ setupCollectionDb conn = do
   -- Keeping at one now as this is for the default deck. But i'm not sure what
   -- that meanas. Perhaps we should not have the default deck at all?
   let colDecks =
-        fromList
+        AK.fromList
           [ ( fromText $ T.pack (show dId),
               colDeckDefault
                 { confDeck = Just 1,
@@ -114,7 +116,7 @@ setupCollectionDb conn = do
   -- TODO: Handle multiple models
   let modelId = T.pack $ show miliEpoc
   let colModels =
-        fromList
+        AK.fromList
           [ ( fromText modelId,
               colModelDefault
                 { cssModel = Just cssDefault,
@@ -129,9 +131,9 @@ setupCollectionDb conn = do
           ] ::
           Models
 
-  let modelKeyTexts = toText <$> keys colModels
+  let modelKeyTexts = toText <$> AK.keys colModels
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
-  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts), activeDecksConf = [dId]}
+  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts), activeDecksConf = Just [dId]}
 
   liftIO $
     execute
@@ -152,7 +154,7 @@ setupCollectionDb conn = do
           dconfCol = colDConf,
           tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
         }
-  return (modelKeys ++ [dId])
+  return modelKeys
 
 dbPath :: FilePath
 dbPath = "collection.anki2" -- required name for the anki db
@@ -177,7 +179,7 @@ generateCollection :: DeckGenInfo -> [(T.Text, T.Text)] -> IO ()
 generateCollection genInfo deck = do
   conn <- createCollectionDb
   (modelKeys, infoPostSetup) <- runStateT (setupCollectionDb conn) genInfo
-  let ac (x, y) = addCard (last modelKeys) (head modelKeys) conn x y
-  mapM_ ac deck
-  liftIO $ close conn
-  liftIO $ writeDbToApkg genInfo
+  let ac = map (addCard (head modelKeys) conn) deck
+  mapM_ (`runStateT` infoPostSetup) ac
+  close conn
+  writeDbToApkg genInfo
