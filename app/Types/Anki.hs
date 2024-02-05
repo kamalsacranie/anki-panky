@@ -13,7 +13,8 @@ import GHC.Generics
 data DeckGenInfo = DGInfo
   { deckName :: T.Text,
     filePath :: String,
-    deckFileName :: String
+    deckFileName :: String,
+    deckId :: Maybe Int
   }
   deriving (Show)
 

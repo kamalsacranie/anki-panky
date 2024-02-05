@@ -4,13 +4,15 @@ module Collection.Generate where
 
 import Codec.Archive.Zip
 import Collection.Utils
+import Control.Monad.Cont (MonadIO (liftIO), foldM, foldM_)
+import Control.Monad.State (StateT (runStateT), gets, modify)
 import Data.Aeson (decodeFileStrict)
 import Data.Aeson.Key
 import Data.Aeson.KeyMap (fromList, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as IOT
 import Data.Text.Lazy qualified as TL
@@ -19,8 +21,8 @@ import Database.SQLite.Simple
 import System.Random
 import Types.Anki as A
 
-addCard :: Int -> Connection -> T.Text -> T.Text -> IO ()
-addCard modelId conn front back = do
+addCard :: Int -> Int -> Connection -> T.Text -> T.Text -> IO ()
+addCard dId modelId conn front back = do
   gen <- getStdGen
   let noteGUID :: Int
       noteGUID = fst $ random gen
@@ -52,7 +54,7 @@ addCard modelId conn front back = do
     A.Card
       { idCard = cardId,
         nidCard = noteId,
-        didCard = 100,
+        didCard = dId,
         ordCard = 0,
         modCard = cardId, -- time the card was modified
         usnCard = -1,
@@ -70,49 +72,52 @@ addCard modelId conn front back = do
         dataCard = ""
       }
 
-setupCollectionDb :: Connection -> DeckGenInfo -> IO [Int]
-setupCollectionDb conn genInfo = do
-  queries <- IOT.readFile "./app/setup-migrations.sql"
+setupCollectionDb :: Connection -> Panky [Int]
+setupCollectionDb conn = do
+  queries <- liftIO $ IOT.readFile "./app/setup-migrations.sql"
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
-  mapM_ (execute_ conn . Query) queryString
-  colConfDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/conf.json" :: IO (Maybe Conf))
-  colModelDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/models.json" :: IO (Maybe Model))
-  colDeckDefault <- fromJust <$> (decodeFileStrict "./app/defaultjson/deck.json" :: IO (Maybe Deck))
-  colDConf <- IOT.readFile "./app/defaultjson/dconf.json"
-  cssDefault <- IOT.readFile "./app/defaultjson/card.css"
-  latexPre <- IOT.readFile "./app/defaultjson/preamble.tex"
-  latexPost <- IOT.readFile "./app/defaultjson/postamble.tex"
+  mapM_ (liftIO . (execute_ conn . Query)) queryString
+  colConfDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/conf.json" :: IO (Maybe Conf))
+  colModelDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/models.json" :: IO (Maybe Model))
+  colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/deck.json" :: IO (Maybe Deck))
+  colDConf <- liftIO $ IOT.readFile "./app/defaultjson/dconf.json"
+  cssDefault <- liftIO $ IOT.readFile "./app/defaultjson/card.css"
+  latexPre <- liftIO $ IOT.readFile "./app/defaultjson/preamble.tex"
+  latexPost <- liftIO $ IOT.readFile "./app/defaultjson/postamble.tex"
 
-  currTime <- getPOSIXTime
+  currTime <- liftIO getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
       secEpoc = floor currTime :: Int
 
-  let deckId = 100
+  modify $ \s -> s {deckId = Just miliEpoc}
+  dId <- gets (fromMaybe (error "No Deck Id set during generation.") . deckId)
+  dName <- gets deckName
   -- Keeping at one now as this is for the default deck. But i'm not sure what
   -- that meanas. Perhaps we should not have the default deck at all?
   let colDecks =
         fromList
-          [ ( fromText $ T.pack (show deckId),
+          [ ( fromText $ T.pack (show dId),
               colDeckDefault
                 { confDeck = Just 1,
-                  idDeck = Just deckId,
+                  idDeck = Just dId,
                   modDeck = Just miliEpoc,
-                  nameDeck = Just (deckName genInfo)
+                  nameDeck = Just dName
                 }
             )
           ] ::
           Decks
 
+  -- TODO: Handle multiple models
   let modelId = T.pack $ show miliEpoc
   let colModels =
         fromList
           [ ( fromText modelId,
               colModelDefault
                 { cssModel = Just cssDefault,
-                  didModel = Just deckId,
+                  didModel = Just dId,
                   idModel = Just modelId,
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
@@ -127,24 +132,25 @@ setupCollectionDb conn genInfo = do
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
   let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts)}
 
-  execute
-    conn
-    (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    Col
-      { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
-        crtCol = secEpoc, -- created in seconds
-        modCol = miliEpoc, -- modified in miliseconds
-        scmCol = miliEpoc, -- schema modified in miliseconds
-        verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
-        dtyCol = 0, -- All collections generated will be clean
-        usnCol = 0,
-        lsCol = 0, -- last sync time, not important for a new deck
-        confCol = TL.toStrict $ encodeToLazyText colConf, -- config
-        modelsCol = TL.toStrict $ encodeToLazyText colModels,
-        decksCol = TL.toStrict $ encodeToLazyText colDecks,
-        dconfCol = colDConf,
-        tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
-      }
+  liftIO $
+    execute
+      conn
+      (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      Col
+        { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
+          crtCol = secEpoc, -- created in seconds
+          modCol = miliEpoc, -- modified in miliseconds
+          scmCol = miliEpoc, -- schema modified in miliseconds
+          verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
+          dtyCol = 0, -- All collections generated will be clean
+          usnCol = 0,
+          lsCol = 0, -- last sync time, not important for a new deck
+          confCol = TL.toStrict $ encodeToLazyText colConf, -- config
+          modelsCol = TL.toStrict $ encodeToLazyText colModels,
+          decksCol = TL.toStrict $ encodeToLazyText colDecks,
+          dconfCol = colDConf,
+          tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
+        }
   return modelKeys
 
 dbPath :: FilePath
@@ -163,11 +169,14 @@ writeDbToApkg genInfo = do
       archiveName = deckFileName genInfo <> ".apkg"
   BS.writeFile archiveName $ fromArchive archive
 
-generateCollection :: [(T.Text, T.Text)] -> DeckGenInfo -> IO ()
-generateCollection deck genInfo = do
-  removeIfExists dbPath
-  conn <- open dbPath
-  modelKeys <- setupCollectionDb conn genInfo
-  mapM_ (uncurry (addCard (head modelKeys) conn)) deck
-  close conn
-  writeDbToApkg genInfo
+createCollectionDb :: IO Connection
+createCollectionDb = removeIfExists dbPath *> open dbPath
+
+generateCollection :: DeckGenInfo -> [(T.Text, T.Text)] -> IO ()
+generateCollection genInfo deck = do
+  conn <- createCollectionDb
+  (modelKeys, infoPostSetup) <- runStateT (setupCollectionDb conn) genInfo
+  let ac (x, y) = addCard (last modelKeys) (head modelKeys) conn x y
+  mapM_ ac deck
+  liftIO $ close conn
+  liftIO $ writeDbToApkg genInfo

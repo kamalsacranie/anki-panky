@@ -44,9 +44,10 @@ main = do
         DGInfo
           { filePath = head inputFiles,
             deckFileName = takeBaseName (filePath genInfo),
-            deckName = pack $ takeBaseName (filePath genInfo)
+            deckName = pack $ takeBaseName (filePath genInfo),
+            deckId = Nothing
           }
   input <- T.readFile (filePath genInfo)
   (renderedCards, genInfoPostProd) <- runStateT (produceDeck input) genInfo
 
-  generateCollection renderedCards genInfoPostProd
+  generateCollection genInfoPostProd renderedCards

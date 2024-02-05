@@ -1,5 +1,5 @@
 ---
-name: name of deck/subdeck
+name: name of document
 ---
 
 # Front of the card can be heading
