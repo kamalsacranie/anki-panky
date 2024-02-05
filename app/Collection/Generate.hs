@@ -27,8 +27,9 @@ addCard dId modelId conn front back = do
   let noteGUID :: Int
       noteGUID = fst $ random gen
 
-  -- noteId <- round . (* 1000) <$> getPOSIXTime :: IO Int
-  noteId <- randomRIO (1, 1000)
+  -- technically these should be miliseconds but its not fast enought
+  currentTime <- getPOSIXTime
+  let noteId = floor (currentTime * 10000) :: Int
   execute
     conn
     "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
@@ -46,8 +47,8 @@ addCard dId modelId conn front back = do
         dataNote = ""
       }
 
-  -- cardId <- ((+ 1) . round . (* 1000) <$> getPOSIXTime) :: IO Int
-  cardId <- randomRIO (1, 1000)
+  currentTime' <- getPOSIXTime
+  let cardId = floor (currentTime' * 10000) :: Int
   execute
     conn
     "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
@@ -130,7 +131,7 @@ setupCollectionDb conn = do
 
   let modelKeyTexts = toText <$> keys colModels
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
-  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts)}
+  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts), activeDecksConf = [dId]}
 
   liftIO $
     execute
@@ -151,7 +152,7 @@ setupCollectionDb conn = do
           dconfCol = colDConf,
           tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
         }
-  return modelKeys
+  return (modelKeys ++ [dId])
 
 dbPath :: FilePath
 dbPath = "collection.anki2" -- required name for the anki db
