@@ -79,6 +79,7 @@ executable anki-panky
     build-depends:  
         time,
         filepath,
+        containers,
         random,
         zip-archive,
         directory,

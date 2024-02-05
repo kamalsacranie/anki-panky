@@ -6,15 +6,17 @@ module Types.Anki where
 import Control.Monad.State.Lazy (StateT)
 import Data.Aeson
 import Data.Aeson.KeyMap (KeyMap)
+import Data.Set as Set
 import Data.Text as T
 import Database.SQLite.Simple (FromRow, ToRow)
 import GHC.Generics
 
 data DeckGenInfo = DGInfo
   { deckName :: T.Text,
-    filePath :: String,
+    filePath :: FilePath,
     deckFileName :: String,
-    deckId :: Maybe Int
+    deckId :: Maybe Int,
+    mediaDG :: [(Int, MediaItem)]
   }
   deriving (Show)
 
@@ -79,6 +81,12 @@ dropSuffix suffix str = Prelude.take (Prelude.length str - Prelude.length suffix
 
 deckSuffix :: String
 deckSuffix = "Deck"
+
+data MediaItem = DeckMedia FilePath String deriving (Show, Eq, Ord)
+
+type DeckMediaSet = Set.Set MediaItem
+
+type DeckMedia = [(Int, MediaItem)]
 
 type Panky a = StateT DeckGenInfo IO a
 

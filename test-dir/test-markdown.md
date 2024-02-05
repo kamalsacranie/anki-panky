@@ -2,6 +2,12 @@
 name: name of document
 ---
 
+# Image card
+
+![jfkdsljfl](./assets/test-markdown/jfksdjfkdsjfdk.png)
+
+![image](./assets/test-markdown/test-image.png)
+
 # Front of the card can be heading
 
 ```javascript

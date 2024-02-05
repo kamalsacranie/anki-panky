@@ -6,9 +6,9 @@ import Codec.Archive.Zip
 import Collection.Utils
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (StateT (runStateT), gets, modify)
-import Data.Aeson (decodeFileStrict)
-import Data.Aeson.Key
-import Data.Aeson.KeyMap qualified as AK (fromList, keys)
+import Data.Aeson (decodeFileStrict, encode)
+import Data.Aeson.Key qualified as AK (fromString, fromText, toText)
+import Data.Aeson.KeyMap qualified as AKM (fromList, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
@@ -101,8 +101,8 @@ setupCollectionDb conn = do
   -- Keeping at one now as this is for the default deck. But i'm not sure what
   -- that meanas. Perhaps we should not have the default deck at all?
   let colDecks =
-        AK.fromList
-          [ ( fromText $ T.pack (show dId),
+        AKM.fromList
+          [ ( AK.fromText $ T.pack (show dId),
               colDeckDefault
                 { confDeck = Just 1,
                   idDeck = Just dId,
@@ -116,8 +116,8 @@ setupCollectionDb conn = do
   -- TODO: Handle multiple models
   let modelId = T.pack $ show miliEpoc
   let colModels =
-        AK.fromList
-          [ ( fromText modelId,
+        AKM.fromList
+          [ ( AK.fromText modelId,
               colModelDefault
                 { cssModel = Just cssDefault,
                   didModel = Just dId,
@@ -131,7 +131,7 @@ setupCollectionDb conn = do
           ] ::
           Models
 
-  let modelKeyTexts = toText <$> AK.keys colModels
+  let modelKeyTexts = AK.toText <$> AKM.keys colModels
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
   let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts), activeDecksConf = Just [dId]}
 
@@ -159,16 +159,17 @@ setupCollectionDb conn = do
 dbPath :: FilePath
 dbPath = "collection.anki2" -- required name for the anki db
 
-writeDbToApkg :: DeckGenInfo -> IO ()
-writeDbToApkg genInfo = do
+generateMediaEntry :: (Int, MediaItem) -> IO Entry
+generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
+
+writeDbToApkg :: DeckGenInfo -> DeckMedia -> IO ()
+writeDbToApkg genInfo media = do
   let archivePath = "collection.anki2"
-  entry <-
-    toEntry
-      archivePath
-      . round
-      <$> getPOSIXTime
-      <*> BS.readFile dbPath
-  let archive = addEntryToArchive entry emptyArchive
+  mentry <- mapM generateMediaEntry media
+  let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
+  mediajsonFile <- toEntry "media" . round <$> getPOSIXTime <*> pure mediajson
+  cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbPath
+  let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
       archiveName = deckFileName genInfo <> ".apkg"
   BS.writeFile archiveName $ fromArchive archive
 
@@ -182,4 +183,4 @@ generateCollection genInfo deck = do
   let ac = map (addCard (head modelKeys) conn) deck
   mapM_ (`runStateT` infoPostSetup) ac
   close conn
-  writeDbToApkg genInfo
+  writeDbToApkg genInfo (mediaDG infoPostSetup)
