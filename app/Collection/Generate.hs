@@ -76,20 +76,20 @@ addCard modelId conn (front, back) = do
 
 setupCollectionDb :: Connection -> Panky [Int]
 setupCollectionDb conn = do
-  queries <- liftIO $ IOT.readFile "./app/setup-migrations.sql"
+  queries <- liftIO $ IOT.readFile "./data/setup-migrations.sql"
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
   mapM_ (liftIO . (execute_ conn . Query)) queryString
 
-  colConfDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/conf.json" :: IO (Maybe Conf))
-  colModelDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/models.json" :: IO (Maybe Model))
-  colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./app/defaultjson/deck.json" :: IO (Maybe Deck))
-  colDConf <- liftIO $ IOT.readFile "./app/defaultjson/dconf.json"
-  cssDefault <- liftIO $ IOT.readFile "./app/defaultjson/card.css"
-  latexPre <- liftIO $ IOT.readFile "./app/defaultjson/preamble.tex"
-  latexPost <- liftIO $ IOT.readFile "./app/defaultjson/postamble.tex"
+  colConfDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe Conf))
+  colModelDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
+  colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
+  colDConf <- liftIO $ IOT.readFile "./data/default-anki-json/dconf.json"
+  cssDefault <- liftIO $ IOT.readFile "./data/css/card.css"
+  latexPre <- liftIO $ IOT.readFile "./data/latex/preamble.tex"
+  latexPost <- liftIO $ IOT.readFile "./data/latex/postamble.tex"
 
   currTime <- liftIO getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
