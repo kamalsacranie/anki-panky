@@ -18,7 +18,7 @@ import Types.Parser as P
 textToAst :: T.Text -> IO Pandoc
 textToAst txt = do
   runIOorExplode $
-    readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True} txt
+    readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True, readerStripComments = True} txt
 
 documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc)]
 documenttizeDeck document =
