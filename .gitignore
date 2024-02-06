@@ -1,6 +1,3 @@
-# Created by https://www.toptal.com/developers/gitignore/api/haskell
-# Edit at https://www.toptal.com/developers/gitignore?templates=haskell
-
 ### Haskell ###
 dist
 dist-*
@@ -26,7 +23,7 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 
-# End of https://www.toptal.com/developers/gitignore/api/haskell
+### Project ###
 
 **/*.anki2
 **/*.apkg

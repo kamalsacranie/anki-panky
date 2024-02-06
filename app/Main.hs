@@ -1,14 +1,19 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use lambda-case" #-}
 
 import Collection.Generate
 import Constructor (produceDeck)
 import Control.Monad.State.Lazy (StateT (runStateT), when)
+import Data.List (intercalate)
 import Data.Text (pack)
 import Data.Text.Lazy qualified as LT (takeWhile, toStrict, unpack)
 import Data.Text.Lazy.IO qualified as LTO (readFile)
-import System.Directory (makeAbsolute)
+import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
-import System.FilePath (takeBaseName)
+import System.FilePath (takeBaseName, takeDirectory)
 import Types.Anki
 
 handleFile :: FilePath -> IO ()
@@ -49,7 +54,36 @@ main = do
   let inputSources = [source | SourcePath source <- args]
   absInputSources <- mapM makeAbsolute inputSources
   let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _ -> True)]
+  -- How are we going to handle directories for rendering
+  trees <- mapM (`constructDeckTree` []) absInputSources
+  print trees
   mapM_ handleFile absInputSources
+
+constructDeckTree :: FilePath -> [String] -> IO [DeckFile]
+constructDeckTree path s =
+  doesDirectoryExist path
+    >>= ( \case
+            True -> do
+              paths <- listDirectory path
+              let deckName =
+                    if not (null [p | p <- paths, case p of ('.' : _) -> True; _ -> False])
+                      then tail (head paths)
+                      else case reverse path of
+                        ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
+                        _ -> takeBaseName path
+              let filesToProcess = [path ++ "/" ++ p | p <- paths, case p of ('.' : _) -> False; _ -> True]
+              let s' = s ++ [deckName]
+              deckFiless <- mapM (`constructDeckTree` s') filesToProcess
+              return $ concat deckFiless
+            False -> return [InputFile path (DPos s)]
+        )
+
+newtype DeckPos = DPos [String]
+
+instance Show DeckPos where
+  show (DPos xs) = intercalate "::" xs
+
+data DeckFile = InputFile FilePath DeckPos deriving (Show)
 
 data PankyFlag
   = Verbose
