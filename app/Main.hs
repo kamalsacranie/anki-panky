@@ -46,10 +46,10 @@ main = do
   rawArgs <- concatMap (splitStringOnce '=') <$> getArgs
   let args = parseArgs rawArgs
 
-  let inputFiles = [file | File file <- args]
-  absInputFiles <- mapM makeAbsolute inputFiles
-  let _opts = [arg | arg <- args, (case arg of File _ -> False; _ -> True)]
-  mapM_ handleFile absInputFiles
+  let inputSources = [source | SourcePath source <- args]
+  absInputSources <- mapM makeAbsolute inputSources
+  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _ -> True)]
+  mapM_ handleFile absInputSources
 
 data PankyFlag
   = Verbose
@@ -65,7 +65,7 @@ data PankyOption
   deriving (Show)
 
 data PankyArg
-  = File FilePath
+  = SourcePath FilePath
   | PFlag PankyFlag
   | POpt PankyKWarg String
   deriving (Show)
@@ -82,9 +82,9 @@ parseArgs ['-' : optString] = case parsePankyOption optString of
   Just (Flag flag) -> [PFlag flag]
   Just (Opt _) -> error "Option without value"
   Nothing -> error $ "Invalid CLI arg -" ++ optString
-parseArgs [x] = [File x]
+parseArgs [x] = [SourcePath x]
 parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
   Just (Flag flag) -> PFlag flag : parseArgs (optv : xs)
   Just (Opt kwarg) -> POpt kwarg optv : parseArgs xs
   Nothing -> error $ "Invalid CLI arg -" ++ optString
-parseArgs (file : xs) = File file : parseArgs xs
+parseArgs (file : xs) = SourcePath file : parseArgs xs
