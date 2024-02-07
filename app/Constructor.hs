@@ -9,7 +9,7 @@ import CardParser.SimpleCard
 import Control.Applicative
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (State, gets, modify, runState)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Set as Set
 import Data.Text qualified as T
 import System.FilePath (takeDirectory, (</>))
@@ -78,11 +78,10 @@ mediaSetFromBlocks (x : xs) root = do
 
 -- | Returns a list of tuples which contain rendered HTML for the front and
 -- | back of the cards provided in the order that they appeared
-produceDeck :: T.Text -> Panky [(T.Text, T.Text)]
-produceDeck input = do
-  (Pandoc meta blocks') <- liftIO (textToAst input)
+produceDeck :: Pandoc -> Panky [(T.Text, T.Text)]
+produceDeck (Pandoc meta blocks') = do
   fp <- gets filePath
-  let (blocks, media) = runState (mediaSetFromBlocks blocks' (takeDirectory fp)) Set.empty
+  let (blocks, media) = runState (mediaSetFromBlocks blocks' (takeDirectory (fromJust fp))) Set.empty
   modify
     ( \st -> st {mediaDG = zip [0 :: Int ..] (Set.toList media)}
     )
@@ -90,7 +89,7 @@ produceDeck input = do
   modify
     ( \st -> case documentName of
         Nothing -> st
-        Just name -> st {deckName = fromMaybe (deckName st) (metaValueToText name)}
+        Just name -> st {deckName = Just (fromMaybe (fromJust (deckName st)) (metaValueToText name))} -- this absolutely needs to change
     )
   let deck = concat $ parseAll cards blocks
       docDeck = documenttizeDeck (Pandoc meta) deck

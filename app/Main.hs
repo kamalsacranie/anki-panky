@@ -1,42 +1,109 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-{-# HLINT ignore "Use lambda-case" #-}
-
 import Collection.Generate
-import Constructor (produceDeck)
-import Control.Monad.State.Lazy (StateT (runStateT), when)
+import Constructor (produceDeck, textToAst)
+import Control.Monad.State.Lazy
+import Data.Aeson (decodeFileStrict, decodeStrictText, encode)
+import Data.Aeson.Key qualified as AK
+import Data.Aeson.KeyMap qualified as AKM
+import Data.Aeson.Text (encodeToLazyText)
+import Data.ByteString.Lazy qualified as BL
 import Data.List (intercalate)
-import Data.Text (pack)
-import Data.Text.Lazy qualified as LT (takeWhile, toStrict, unpack)
+import Data.Maybe (fromJust, fromMaybe)
+import Data.Text qualified as T
+import Data.Text.Lazy qualified as LT (Text, takeWhile, toStrict, unpack)
+import Data.Text.Lazy.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
+import Data.Time.Clock.POSIX (getPOSIXTime)
+import Database.SQLite.Simple (Connection, Only (Only), Query (Query), execute, query_)
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory)
 import Types.Anki
 
-handleFile :: FilePath -> IO ()
-handleFile file = do
+-- | Checks if the input file is a valid deck file
+-- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
+isValidFile :: BL.ByteString -> Bool
+isValidFile input = case decodeUtf8' input of
+  Left _ -> False
+  Right res -> case LT.unpack res of
+    ('-' : '-' : '-' : '\n' : _) -> True
+    ('#' : ' ' : _) -> True
+    _ -> False
+
+handleDeck :: Connection -> [Int] -> DeckFile -> Panky ()
+handleDeck conn modelKeys (InputFile path deckPrefix) = do
+  byteTestInput <- liftIO $ BL.take 1000 <$> BL.readFile path
+  when (isValidFile byteTestInput) $ do
+    input <- liftIO $ LTO.readFile path
+    doc <- liftIO $ textToAst $ LT.toStrict input
+    jfkdsj <- get
+    liftIO $ print jfkdsj
+    modify (\s -> s {filePath = Just path})
+    renderedCards <- produceDeck doc
+    if null renderedCards
+      then liftIO $ putStrLn $ "Skipping file \"" ++ path ++ "\" as it failed to parse its cards"
+      else do
+        currTime <- liftIO getPOSIXTime
+        let miliEpoc = floor $ currTime * 10000 :: Int
+        modify
+          ( \s ->
+              s
+                { deckFileName = Just $ takeBaseName path,
+                  deckName = Just $ T.pack (show deckPrefix ++ "::" ++ takeBaseName path),
+                  deckId = Just miliEpoc
+                }
+          )
+        colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
+        dId <- gets (fromMaybe (error "No Deck Id set during generation.") . deckId)
+        dName <- gets (fromMaybe (error "No Deck Name set during generation.") . deckName)
+        -- Keeping at one now as this is for the default deck. But i'm not sure what
+        -- that meanas. Perhaps we should not have the default deck at all?
+        let newDeck =
+              colDeckDefault
+                { confDeck = Just 1,
+                  idDeck = Just dId,
+                  modDeck = Just miliEpoc,
+                  nameDeck = Just dName
+                }
+
+        [[decksResult :: T.Text]] <- liftIO $ query_ conn (Query "SELECT decks FROM col")
+        liftIO $ print decksResult
+        let decks :: Decks = fromJust $ decodeStrictText decksResult
+        let appendedDecks = AKM.insert (AK.fromText $ T.pack (show dId)) newDeck decks
+        liftIO $ execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
+        generateDeck conn modelKeys renderedCards
+
+handleCol :: [DeckFile] -> IO ()
+handleCol deckFiles = do
+  c <- createCollectionDb
+  -- Due for a refactor. The only thing we need at the collection level is the media
   let genInfo =
         DGInfo
-          { filePath = file,
-            deckFileName = takeBaseName (filePath genInfo),
-            deckName = pack $ takeBaseName (filePath genInfo),
+          { filePath = Nothing,
+            deckFileName = Nothing,
+            deckName = Nothing,
             deckId = Nothing,
             mediaDG = []
           }
-  input <- LTO.readFile (filePath genInfo)
-  let firstLine = LT.takeWhile (/= '\n') input
-  let isValidFile = case LT.unpack firstLine of
-        "---" -> True
-        ('#' : ' ' : _) -> True
-        _ -> False
-  when isValidFile $ do
-    (renderedCards, genInfoPostProd) <- runStateT (produceDeck (LT.toStrict input)) genInfo
-    if null renderedCards
-      then putStrLn $ "Skipping file \"" ++ deckFileName genInfoPostProd ++ "\" as it failed to parse"
-      else generateCollection genInfoPostProd renderedCards
+  modelKeys <- setupCollectionDb c
+  finalState <- -- need to do this to accumulate our media
+    foldM
+      ( \st deck -> do
+          (_, newSt) <- runStateT (handleDeck c modelKeys deck) st
+          return newSt
+      )
+      genInfo
+      deckFiles
+  print finalState
+  -- let colConf = undefined -- get from col db
+  -- let dId = undefined -- get tail deck id from col db
+  -- let colConf' = colConf {activeDecksConf = Just [dId]}
+  -- update colConf
+  writeDbToApkg finalState
 
 splitStringOnce :: Char -> String -> [String]
 splitStringOnce _ "" = []
@@ -51,13 +118,10 @@ main = do
   rawArgs <- concatMap (splitStringOnce '=') <$> getArgs
   let args = parseArgs rawArgs
 
-  let inputSources = [source | SourcePath source <- args]
-  absInputSources <- mapM makeAbsolute inputSources
+  inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
   let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _ -> True)]
-  -- How are we going to handle directories for rendering
-  trees <- mapM (`constructDeckTree` []) absInputSources
-  print trees
-  mapM_ handleFile absInputSources
+  trees <- mapM (`constructDeckTree` []) inputSources
+  mapM_ handleCol [head trees]
 
 constructDeckTree :: FilePath -> [String] -> IO [DeckFile]
 constructDeckTree path s =

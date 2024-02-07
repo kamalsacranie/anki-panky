@@ -12,9 +12,9 @@ import Database.SQLite.Simple (FromRow, ToRow)
 import GHC.Generics
 
 data DeckGenInfo = DGInfo
-  { deckName :: T.Text,
-    filePath :: FilePath,
-    deckFileName :: String,
+  { deckName :: Maybe T.Text,
+    filePath :: Maybe FilePath,
+    deckFileName :: Maybe String,
     deckId :: Maybe Int,
     mediaDG :: [(Int, MediaItem)]
   }

@@ -5,7 +5,7 @@ module Collection.Generate where
 import Codec.Archive.Zip
 import Collection.Utils
 import Control.Monad.Cont (MonadIO (liftIO))
-import Control.Monad.State (StateT (runStateT), gets, modify)
+import Control.Monad.State (gets)
 import Data.Aeson (decodeFileStrict, encode)
 import Data.Aeson.Key qualified as AK (fromString, fromText, toText)
 import Data.Aeson.KeyMap qualified as AKM (fromList, keys)
@@ -74,44 +74,25 @@ addCard modelId conn (front, back) = do
           dataCard = ""
         }
 
-setupCollectionDb :: Connection -> Panky [Int]
+setupCollectionDb :: Connection -> IO [Int]
 setupCollectionDb conn = do
-  queries <- liftIO $ IOT.readFile "./data/setup-migrations.sql"
+  queries <- IOT.readFile "./data/setup-migrations.sql"
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
-  mapM_ (liftIO . (execute_ conn . Query)) queryString
+  mapM_ (execute_ conn . Query) queryString
 
-  colConfDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe Conf))
-  colModelDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
-  colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
-  colDConf <- liftIO $ IOT.readFile "./data/default-anki-json/dconf.json"
-  cssDefault <- liftIO $ IOT.readFile "./data/css/card.css"
-  latexPre <- liftIO $ IOT.readFile "./data/latex/preamble.tex"
-  latexPost <- liftIO $ IOT.readFile "./data/latex/postamble.tex"
+  colConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe Conf))
+  colModelDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
+  colDConf <- IOT.readFile "./data/default-anki-json/dconf.json"
+  cssDefault <- IOT.readFile "./data/css/card.css"
+  latexPre <- IOT.readFile "./data/latex/preamble.tex"
+  latexPost <- IOT.readFile "./data/latex/postamble.tex"
 
-  currTime <- liftIO getPOSIXTime
+  currTime <- getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
       secEpoc = floor currTime :: Int
-
-  modify $ \s -> s {deckId = Just miliEpoc}
-  dId <- gets (fromMaybe (error "No Deck Id set during generation.") . deckId)
-  dName <- gets deckName
-  -- Keeping at one now as this is for the default deck. But i'm not sure what
-  -- that meanas. Perhaps we should not have the default deck at all?
-  let colDecks =
-        AKM.fromList
-          [ ( AK.fromText $ T.pack (show dId),
-              colDeckDefault
-                { confDeck = Just 1,
-                  idDeck = Just dId,
-                  modDeck = Just miliEpoc,
-                  nameDeck = Just dName
-                }
-            )
-          ] ::
-          Decks
 
   -- TODO: Handle multiple models
   let modelId = T.pack $ show miliEpoc
@@ -120,7 +101,7 @@ setupCollectionDb conn = do
           [ ( AK.fromText modelId,
               colModelDefault
                 { cssModel = Just cssDefault,
-                  didModel = Just dId,
+                  didModel = Nothing, -- update the did later
                   idModel = Just modelId,
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
@@ -133,27 +114,26 @@ setupCollectionDb conn = do
 
   let modelKeyTexts = AK.toText <$> AKM.keys colModels
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
-  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts), activeDecksConf = Just [dId]}
+  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts)}
 
-  liftIO $
-    execute
-      conn
-      (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      Col
-        { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
-          crtCol = secEpoc, -- created in seconds
-          modCol = miliEpoc, -- modified in miliseconds
-          scmCol = miliEpoc, -- schema modified in miliseconds
-          verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
-          dtyCol = 0, -- All collections generated will be clean
-          usnCol = 0,
-          lsCol = 0, -- last sync time, not important for a new deck
-          confCol = TL.toStrict $ encodeToLazyText colConf, -- config
-          modelsCol = TL.toStrict $ encodeToLazyText colModels,
-          decksCol = TL.toStrict $ encodeToLazyText colDecks,
-          dconfCol = colDConf,
-          tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
-        }
+  execute
+    conn
+    (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    Col
+      { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
+        crtCol = secEpoc, -- created in seconds
+        modCol = miliEpoc, -- modified in miliseconds
+        scmCol = miliEpoc, -- schema modified in miliseconds
+        verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
+        dtyCol = 0, -- All collections generated will be clean
+        usnCol = 0,
+        lsCol = 0, -- last sync time, not important for a new deck
+        confCol = TL.toStrict $ encodeToLazyText colConf, -- config
+        modelsCol = TL.toStrict $ encodeToLazyText colModels,
+        decksCol = "{}",
+        dconfCol = colDConf,
+        tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
+      }
   return modelKeys
 
 dbPath :: FilePath
@@ -162,25 +142,20 @@ dbPath = "collection.anki2" -- required name for the anki db
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
 generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
 
-writeDbToApkg :: DeckGenInfo -> DeckMedia -> IO ()
-writeDbToApkg genInfo media = do
+writeDbToApkg :: DeckGenInfo -> IO ()
+writeDbToApkg genInfo = do
+  let media = mediaDG genInfo
   let archivePath = "collection.anki2"
   mentry <- mapM generateMediaEntry media
   let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
   mediajsonFile <- toEntry "media" . round <$> getPOSIXTime <*> pure mediajson
   cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbPath
   let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
-      archiveName = deckFileName genInfo <> ".apkg"
+      archiveName = fromJust (deckFileName genInfo) <> ".apkg"
   BS.writeFile archiveName $ fromArchive archive
 
 createCollectionDb :: IO Connection
 createCollectionDb = removeIfExists dbPath *> open dbPath
 
-generateCollection :: DeckGenInfo -> [(T.Text, T.Text)] -> IO ()
-generateCollection genInfo deck = do
-  conn <- createCollectionDb
-  (modelKeys, infoPostSetup) <- runStateT (setupCollectionDb conn) genInfo
-  let ac = map (addCard (head modelKeys) conn) deck
-  mapM_ (`runStateT` infoPostSetup) ac
-  close conn
-  writeDbToApkg genInfo (mediaDG infoPostSetup)
+generateDeck :: Connection -> [Int] -> [(T.Text, T.Text)] -> Panky ()
+generateDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
