@@ -15,7 +15,7 @@ import Data.Text qualified as T
 import System.FilePath (takeDirectory, (</>))
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
-import Types.Anki
+import Types (DeckGenInfo (..), DeckMediaSet, MediaItem (DeckMedia), Panky)
 import Types.Parser as P
 
 textToAst :: T.Text -> IO Pandoc

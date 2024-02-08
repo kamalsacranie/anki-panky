@@ -8,6 +8,14 @@ A Red-Black Tree is a BST satifying these properties:
 1. For each node, every path from it to a leaf has the same **number of black
    nodes**
 
+<!-- Anki tags are represented as using the fictional tag `AnkiTags`. This way
+if you wanted to render to HTML or pdf using pandoc. They are basically ignored.
+Although, if you are rendering to HTML, you should probably close the tag. I
+might change this to be in a comment and then reenable comment parsing in our
+programme -->
+
+<AnkiTags this is-how we-have anki tags/>
+
 # If a R-B tree contains $n$ elements, what is the maximum length of a path?
 
 $log(n + 1)$

@@ -1,12 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 import Collection.Generate
 import Constructor (produceDeck, textToAst)
 import Control.Monad.State.Lazy
-import Data.Aeson (decodeFileStrict, decodeStrictText, encode)
+import Data.Aeson (decodeFileStrict, decodeStrictText)
 import Data.Aeson.Key qualified as AK
 import Data.Aeson.KeyMap qualified as AKM
 import Data.Aeson.Text (encodeToLazyText)
@@ -14,7 +13,7 @@ import Data.ByteString.Lazy qualified as BL
 import Data.List (intercalate)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text qualified as T
-import Data.Text.Lazy qualified as LT (Text, takeWhile, toStrict, unpack)
+import Data.Text.Lazy qualified as LT (toStrict, unpack)
 import Data.Text.Lazy.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
 import Data.Time.Clock.POSIX (getPOSIXTime)
@@ -22,7 +21,8 @@ import Database.SQLite.Simple (Connection, Only (Only), Query (Query), execute, 
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory)
-import Types.Anki
+import Types (DeckGenInfo (..), Panky)
+import Types.Anki.JSON (Deck (..), Decks)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
@@ -32,7 +32,7 @@ isValidFile input = case decodeUtf8' input of
   Right res -> case LT.unpack res of
     ('-' : '-' : '-' : '\n' : _) -> True
     ('#' : ' ' : _) -> True
-    _ -> False
+    _anyOtherFirstLine -> False
 
 handleDeck :: Connection -> [Int] -> DeckFile -> Panky ()
 handleDeck conn modelKeys (InputFile path deckPrefix) = do
@@ -40,8 +40,6 @@ handleDeck conn modelKeys (InputFile path deckPrefix) = do
   when (isValidFile byteTestInput) $ do
     input <- liftIO $ LTO.readFile path
     doc <- liftIO $ textToAst $ LT.toStrict input
-    jfkdsj <- get
-    liftIO $ print jfkdsj
     modify (\s -> s {filePath = Just path})
     renderedCards <- produceDeck doc
     if null renderedCards
@@ -119,7 +117,7 @@ main = do
   let args = parseArgs rawArgs
 
   inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
-  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _ -> True)]
+  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
   trees <- mapM (`constructDeckTree` []) inputSources
   mapM_ handleCol [head trees]
 
@@ -134,8 +132,8 @@ constructDeckTree path s =
                       then tail (head paths)
                       else case reverse path of
                         ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
-                        _ -> takeBaseName path
-              let filesToProcess = [path ++ "/" ++ p | p <- paths, case p of ('.' : _) -> False; _ -> True]
+                        _nonDirStylePath -> takeBaseName path
+              let filesToProcess = [path ++ "/" ++ p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
               let s' = s ++ [deckName]
               deckFiless <- mapM (`constructDeckTree` s') filesToProcess
               return $ concat deckFiless
@@ -147,7 +145,9 @@ newtype DeckPos = DPos [String]
 instance Show DeckPos where
   show (DPos xs) = intercalate "::" xs
 
-data DeckFile = InputFile FilePath DeckPos deriving (Show)
+data DeckFile where
+  InputFile :: FilePath -> DeckPos -> DeckFile
+  deriving (Show)
 
 data PankyFlag
   = Verbose
@@ -157,15 +157,15 @@ data PankyKWarg
   = DeckName
   deriving (Show)
 
-data PankyOption
-  = Flag PankyFlag
-  | Opt PankyKWarg
+data PankyOption where
+  Flag :: PankyFlag -> PankyOption
+  Opt :: PankyKWarg -> PankyOption
   deriving (Show)
 
-data PankyArg
-  = SourcePath FilePath
-  | PFlag PankyFlag
-  | POpt PankyKWarg String
+data PankyArg where
+  SourcePath :: FilePath -> PankyArg
+  PFlag :: PankyFlag -> PankyArg
+  POpt :: PankyKWarg -> String -> PankyArg
   deriving (Show)
 
 parsePankyOption :: String -> Maybe PankyOption

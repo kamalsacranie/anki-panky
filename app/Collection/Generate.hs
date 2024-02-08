@@ -19,7 +19,9 @@ import Data.Text.Lazy qualified as TL
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Random
-import Types.Anki as A
+import Types (DeckGenInfo (..), MediaItem (DeckMedia), Panky)
+import Types.Anki.JSON (MConf (..), Model (..), Models)
+import Types.Anki.SQL as ANS
 
 addCard :: Int -> Connection -> (T.Text, T.Text) -> Panky ()
 addCard modelId conn (front, back) = do
@@ -33,7 +35,7 @@ addCard modelId conn (front, back) = do
     execute
       conn
       "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-      A.Note
+      ANS.Note
         { idNote = noteId,
           guidNote = T.pack $ show noteGUID,
           midNote = modelId,
@@ -53,12 +55,12 @@ addCard modelId conn (front, back) = do
     execute
       conn
       "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-      A.Card
+      ANS.Card
         { idCard = cardId,
           nidCard = noteId,
           didCard = dId,
           ordCard = 0,
-          modCard = cardId, -- time the card was modified
+          modCard = cardId `div` 10000, -- time the card was modified
           usnCard = -1,
           typeCard = 0,
           queueCard = 0,
@@ -83,7 +85,9 @@ setupCollectionDb conn = do
         commands -> reverse commands
   mapM_ (execute_ conn . Query) queryString
 
-  colConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe Conf))
+  colMConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe MConf))
+  temp <- IOT.readFile "./data/default-anki-json/models.json"
+  print temp
   colModelDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
   colDConf <- IOT.readFile "./data/default-anki-json/dconf.json"
   cssDefault <- IOT.readFile "./data/css/card.css"
@@ -114,17 +118,17 @@ setupCollectionDb conn = do
 
   let modelKeyTexts = AK.toText <$> AKM.keys colModels
       modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
-  let colConf = colConfDefault {curModelConf = Just (last modelKeyTexts)}
+  let colConf = colMConfDefault {curModelMConf = Just (last modelKeyTexts)}
 
   execute
     conn
     (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    Col
-      { idCol = 1, -- will always be one because i don't think its necessary to do multiple collecitons
-        crtCol = secEpoc, -- created in seconds
-        modCol = miliEpoc, -- modified in miliseconds
-        scmCol = miliEpoc, -- schema modified in miliseconds
-        verCol = 11, -- Version of Anki. It seems like 11 is the latest version? idk
+    ANS.Col
+      { idCol = 1,
+        crtCol = secEpoc,
+        modCol = miliEpoc,
+        scmCol = miliEpoc,
+        verCol = 11,
         dtyCol = 0, -- All collections generated will be clean
         usnCol = 0,
         lsCol = 0, -- last sync time, not important for a new deck

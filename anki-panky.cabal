@@ -1,4 +1,4 @@
-cabal-version:      3.4
+cabal-version:      3.8
 -- The cabal-version field refers to the version of the .cabal specification,
 -- and can be different from the cabal-install (the tool) version and the
 -- Cabal (the library) version you are using. As such, the Cabal (the library)
@@ -66,14 +66,18 @@ executable anki-panky
         CardParser.ExtCard
         CardParser.Parser
         CardParser.SimpleCard
-        Types.Anki
+        Types.Anki.SQL
+        Types.Anki.JSON
         Types.Parser
+        Types
         Collection.Generate
         Collection.Utils
         Constructor
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    -- LANGUAGE extensions used by all the modules in the package.
+    default-extensions:
+        DeriveAnyClass
+        DeriveGeneric
 
     -- Other library packages from which modules are imported.
     build-depends:  
