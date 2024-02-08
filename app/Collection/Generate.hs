@@ -18,7 +18,7 @@ import Data.Text.Lazy.IO qualified as IOT
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Random
-import Types (DeckGenInfo (..), MediaItem (DeckMedia), Panky)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky)
 import Types.Anki.JSON (MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
 
@@ -49,7 +49,7 @@ addCard modelId conn (front, back) = do
         }
 
   cardId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
-  dId <- gets (fromMaybe (error "No deck ID present while adding cards to deck.") . deckId)
+  dId <- gets deckId
   liftIO $
     execute
       conn
@@ -85,8 +85,6 @@ setupCollectionDb conn = do
   mapM_ (execute_ conn . Query . T.toStrict) queryString
 
   colMConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe MConf))
-  temp <- IOT.readFile "./data/default-anki-json/models.json"
-  print temp
   colModelDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
   colDConf <- IOT.readFile "./data/default-anki-json/dconf.json"
   cssDefault <- IOT.readFile "./data/css/card.css"
@@ -145,17 +143,16 @@ dbPath = "collection.anki2" -- required name for the anki db
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
 generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
 
-writeDbToApkg :: DeckGenInfo -> IO ()
-writeDbToApkg genInfo = do
-  let media = mediaDG genInfo
+writeDbToApkg :: MediaDeck -> T.Text -> IO ()
+writeDbToApkg media colName = do
   let archivePath = "collection.anki2"
   mentry <- mapM generateMediaEntry media
   let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
   mediajsonFile <- toEntry "media" . round <$> getPOSIXTime <*> pure mediajson
   cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbPath
   let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
-      archiveName = fromJust (deckFileName genInfo) <> ".apkg"
-  BS.writeFile archiveName $ fromArchive archive
+      archiveName = colName <> ".apkg" -- should be the package name
+  BS.writeFile (T.unpack archiveName) $ fromArchive archive
 
 createCollectionDb :: IO Connection
 createCollectionDb = removeIfExists dbPath *> open dbPath

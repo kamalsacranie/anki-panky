@@ -16,3 +16,4 @@
 - [ ] Look into builtin pandoc xrefs extension
 - [ ] homogenise the mili epoch times
 - [ ] Finish type implementations for JSON objects
+- [ ] Decouple the renaming of deck from deck rendering

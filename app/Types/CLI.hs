@@ -5,6 +5,7 @@ module Types.CLI
     DeckPos (DPos),
     PankyFlag (Verbose),
     PankyKWarg (DeckName),
+    CollectionDir (ColDir),
   )
 where
 
@@ -29,6 +30,10 @@ data DeckFile where
   -- | Contains the file path of the file to be processed and the position of
   -- the resulting deck in the collection.
   InputFile :: FilePath -> DeckPos -> DeckFile
+  deriving (Show)
+
+data CollectionDir where
+  ColDir :: FilePath -> [DeckFile] -> CollectionDir
   deriving (Show)
 
 -- | A flag argument passed to anki-panky from the command line.

@@ -9,14 +9,15 @@ import CardParser.SimpleCard
 import Control.Applicative
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (State, gets, modify, runState)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Set as Set
 import Data.Text qualified as StrictT
 import Data.Text.Lazy qualified as T
 import System.FilePath (takeDirectory, (</>))
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
-import Types (DeckGenInfo (..), DeckMediaSet, MediaItem (DeckMedia), Panky)
+import Types (DeckGenInfo (..), DeckMediaSet, MediaDeck, MediaItem (DeckMedia), Panky, RenderedDeck)
+import Types.CLI (DeckPos)
 import Types.Parser as P
 
 textToAst :: T.Text -> IO Pandoc
@@ -46,7 +47,7 @@ writeFlashCardHtml p = do
   where
     writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
-renderDeck :: [(Pandoc, Pandoc)] -> IO [(T.Text, T.Text)]
+renderDeck :: [(Pandoc, Pandoc)] -> IO RenderedDeck
 renderDeck = mapM single
   where
     single (f, b) = ((,) <$> writeFlashCardHtml f) <*> writeFlashCardHtml b
@@ -81,19 +82,16 @@ mediaSetFromBlocks (x : xs) root = do
 
 -- | Returns a list of tuples which contain rendered HTML for the front and
 -- | back of the cards provided in the order that they appeared
-produceDeck :: Pandoc -> Panky [(T.Text, T.Text)]
-produceDeck (Pandoc meta blocks') = do
-  fp <- gets filePath
-  let (blocks, media) = runState (mediaSetFromBlocks blocks' (takeDirectory (fromJust fp))) Set.empty
-  modify
-    ( \st -> st {mediaDG = zip [0 :: Int ..] (Set.toList media)}
-    )
+produceDeck :: Pandoc -> DeckPos -> Panky (RenderedDeck, MediaDeck)
+produceDeck (Pandoc meta blocks') dpos = do
+  fp <- gets deckPath
+  let (blocks, media) = runState (mediaSetFromBlocks blocks' (takeDirectory fp)) Set.empty
   let documentName = lookupMeta "name" meta
   modify
     ( \st -> case documentName of
         Nothing -> st
-        Just name -> st {deckName = Just (fromMaybe (fromJust (deckName st)) (metaValueToText name))} -- this absolutely needs to change
+        Just name -> st {deckName = T.pack (show dpos ++ "::") <> fromMaybe (deckName st) (metaValueToText name)}
     )
   let deck = concat $ parseAll cards blocks
       docDeck = documenttizeDeck (Pandoc meta) deck
-  liftIO (renderDeck docDeck)
+  liftIO $ (,zip [0 :: Int ..] (Set.toList media)) <$> renderDeck docDeck

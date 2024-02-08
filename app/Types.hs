@@ -3,6 +3,8 @@ module Types
     DeckMediaSet,
     Panky,
     MediaItem (..),
+    RenderedDeck,
+    MediaDeck,
   )
 where
 
@@ -16,15 +18,18 @@ data MediaItem where
 
 type DeckMediaSet = Set.Set MediaItem
 
+type MediaDeck = [(Int, MediaItem)]
+
 type Panky a = StateT DeckGenInfo IO a
+
+type RenderedDeck = [(T.Text, T.Text)]
 
 data DeckGenInfo where
   DGInfo ::
-    { deckName :: Maybe T.Text,
-      filePath :: Maybe FilePath,
-      deckFileName :: Maybe String,
-      deckId :: Maybe Int,
-      mediaDG :: [(Int, MediaItem)]
+    { deckName :: T.Text,
+      deckPath :: FilePath,
+      deckFileName :: String,
+      deckId :: Int
     } ->
     DeckGenInfo
   deriving (Show)

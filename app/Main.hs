@@ -10,7 +10,7 @@ import Data.Aeson.Key qualified as AK
 import Data.Aeson.KeyMap qualified as AKM
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BL
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
@@ -19,7 +19,7 @@ import Database.SQLite.Simple (Connection, Only (Only), Query (Query), execute, 
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory)
-import Types (DeckGenInfo (..), Panky)
+import Types (DeckGenInfo (..), MediaDeck)
 import Types.Anki.JSON (Deck (..), Decks)
 import Types.CLI
 
@@ -33,87 +33,54 @@ isValidFile input = case decodeUtf8' input of
     ('#' : ' ' : _) -> True
     _anyOtherFirstLine -> False
 
-handleDeck :: Connection -> [Int] -> DeckFile -> Panky ()
+handleDeck :: Connection -> [Int] -> DeckFile -> IO MediaDeck
 handleDeck conn modelKeys (InputFile path deckPrefix) = do
-  byteTestInput <- liftIO $ BL.take 1000 <$> BL.readFile path
-  when (isValidFile byteTestInput) $ do
-    input <- liftIO $ LTO.readFile path
-    doc <- liftIO $ textToAst input
-    modify (\s -> s {filePath = Just path})
-    renderedCards <- produceDeck doc
-    if null renderedCards
-      then liftIO $ putStrLn $ "Skipping file \"" ++ path ++ "\" as it failed to parse its cards"
-      else do
-        currTime <- liftIO getPOSIXTime
-        let miliEpoc = floor $ currTime * 10000 :: Int
-        modify
-          ( \s ->
-              s
-                { deckFileName = Just $ takeBaseName path,
-                  deckName = Just $ T.pack (show deckPrefix ++ "::" ++ takeBaseName path),
-                  deckId = Just miliEpoc
-                }
-          )
-        colDeckDefault <- liftIO $ fromJust <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
-        dId <- gets (fromMaybe (error "No Deck Id set during generation.") . deckId)
-        dName <- gets (fromMaybe (error "No Deck Name set during generation.") . deckName)
-        -- Keeping at one now as this is for the default deck. But i'm not sure what
-        -- that meanas. Perhaps we should not have the default deck at all?
-        let newDeck =
-              colDeckDefault
-                { confDeck = Just 1,
-                  idDeck = Just dId,
-                  modDeck = Just miliEpoc,
-                  nameDeck = Just dName
-                }
+  byteTestInput <- BL.take 1000 <$> BL.readFile path
+  if isValidFile byteTestInput
+    then do
+      miliEpoc :: Int <- floor . (* 10000) <$> getPOSIXTime
+      let genInfo1 =
+            DGInfo
+              { deckPath = path,
+                deckFileName = takeBaseName path,
+                deckName = T.pack (show deckPrefix ++ "::" ++ takeBaseName path),
+                deckId = miliEpoc
+              }
+      input <- LTO.readFile path
+      doc <- textToAst input
+      ((renderedDeck, mediaFiles), genInfo2) <- runStateT (produceDeck doc deckPrefix) genInfo1
+      if null renderedDeck
+        then error ("Skipping file \"" ++ path ++ "\" as it failed to parse its cards")
+        else do
+          colDeckDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
+          let newDeck =
+                colDeckDefault
+                  { confDeck = Just 1,
+                    idDeck = Just (deckId genInfo2),
+                    modDeck = Just miliEpoc,
+                    nameDeck = Just (deckName genInfo2)
+                  }
 
-        [[decksResult :: T.Text]] <- liftIO $ query_ conn (Query "SELECT decks FROM col")
-        let decks :: Decks = fromJust $ decodeStrictText $ T.toStrict decksResult
-        let appendedDecks = AKM.insert (AK.fromString (show dId)) newDeck decks
-        liftIO $ execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
-        generateDeck conn modelKeys renderedCards
+          print $ "Deck name: " ++ show (deckName genInfo2)
+          [[decksResult :: T.Text]] <- query_ conn (Query "SELECT decks FROM col")
+          let decks :: Decks = fromJust $ decodeStrictText $ T.toStrict decksResult
+              appendedDecks = AKM.insert (AK.fromString (show (deckId genInfo2))) newDeck decks
+          execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
+          _ <- runStateT (generateDeck conn modelKeys renderedDeck) genInfo2
+          return mediaFiles
+    else return []
 
-handleCol :: [DeckFile] -> IO ()
-handleCol deckFiles = do
+handleCol :: [DeckFile] -> T.Text -> IO ()
+handleCol deckFiles colName = do
   c <- createCollectionDb
-  -- Due for a refactor. The only thing we need at the collection level is the media
-  let genInfo =
-        DGInfo
-          { filePath = Nothing,
-            deckFileName = Nothing,
-            deckName = Nothing,
-            deckId = Nothing,
-            mediaDG = []
-          }
   modelKeys <- setupCollectionDb c
-  finalState <- -- need to do this to accumulate our media
-    foldM
-      ( \st deck -> do
-          (_, newSt) <- runStateT (handleDeck c modelKeys deck) st
-          return newSt
-      )
-      genInfo
-      deckFiles
-  print finalState
-  writeDbToApkg finalState
+  mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
+  writeDbToApkg mediaFiles colName
 
-splitStringOnce :: Char -> String -> [String]
-splitStringOnce _ "" = []
-splitStringOnce delimiter str =
-  let (first, remainder) = break (== delimiter) str
-   in first : case remainder of
-        (_ : rest) -> [rest]
-        [] -> []
-
-main :: IO ()
-main = do
-  rawArgs <- concatMap (splitStringOnce '=') <$> getArgs
-  let args = parseArgs rawArgs
-
-  inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
-  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
-  trees <- mapM (`constructDeckTree` []) inputSources
-  mapM_ handleCol [head trees]
+takeBasePathName :: FilePath -> String
+takeBasePathName path = case reverse path of
+  ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
+  _nonDirStylePath -> takeBaseName path
 
 constructDeckTree :: FilePath -> [T.Text] -> IO [DeckFile]
 constructDeckTree path s =
@@ -124,15 +91,21 @@ constructDeckTree path s =
               let deckName =
                     if not (null [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False])
                       then tail (head paths)
-                      else case reverse path of
-                        ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
-                        _nonDirStylePath -> takeBaseName path
+                      else takeBasePathName path
               let filesToProcess = [path ++ "/" ++ p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
               let s' = s ++ [T.pack deckName]
               deckFiless <- mapM (`constructDeckTree` s') filesToProcess
               return $ concat deckFiless
             False -> return [InputFile path (DPos s)]
         )
+
+splitStringOnce :: Char -> String -> [String]
+splitStringOnce _ "" = []
+splitStringOnce delimiter str =
+  let (first, remainder) = break (== delimiter) str
+   in first : case remainder of
+        (_ : rest) -> [rest]
+        [] -> []
 
 parsePankyOption :: String -> Maybe PankyOption
 parsePankyOption "V" = return $ Flag Verbose
@@ -152,3 +125,20 @@ parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
   Just (Opt kwarg) -> POpt kwarg (T.pack optv) : parseArgs xs
   Nothing -> error $ "Invalid CLI arg -" ++ optString
 parseArgs (file : xs) = SourcePath file : parseArgs xs
+
+main :: IO ()
+main = do
+  rawArgs <- concatMap (splitStringOnce '=') <$> getArgs
+  let args = parseArgs rawArgs
+
+  inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
+  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
+  trees <- mapM (\source -> ColDir source <$> constructDeckTree source []) inputSources
+  when (null trees) $ error "No input files found"
+  mapM_
+    ( \case
+        ColDir fp [] -> print $ "Skipping invalid input file: " ++ show fp
+        ColDir path cds ->
+          handleCol cds (T.pack (takeBasePathName path))
+    )
+    [head trees]
