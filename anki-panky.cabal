@@ -69,6 +69,7 @@ executable anki-panky
         Types.Anki.SQL
         Types.Anki.JSON
         Types.Parser
+        Types.CLI
         Types
         Collection.Generate
         Collection.Utils

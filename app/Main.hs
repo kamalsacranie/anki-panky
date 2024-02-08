@@ -10,7 +10,6 @@ import Data.Aeson.Key qualified as AK
 import Data.Aeson.KeyMap qualified as AKM
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BL
-import Data.List (intercalate)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as LT (toStrict, unpack)
@@ -139,34 +138,6 @@ constructDeckTree path s =
               return $ concat deckFiless
             False -> return [InputFile path (DPos s)]
         )
-
-newtype DeckPos = DPos [String]
-
-instance Show DeckPos where
-  show (DPos xs) = intercalate "::" xs
-
-data DeckFile where
-  InputFile :: FilePath -> DeckPos -> DeckFile
-  deriving (Show)
-
-data PankyFlag
-  = Verbose
-  deriving (Show)
-
-data PankyKWarg
-  = DeckName
-  deriving (Show)
-
-data PankyOption where
-  Flag :: PankyFlag -> PankyOption
-  Opt :: PankyKWarg -> PankyOption
-  deriving (Show)
-
-data PankyArg where
-  SourcePath :: FilePath -> PankyArg
-  PFlag :: PankyFlag -> PankyArg
-  POpt :: PankyKWarg -> String -> PankyArg
-  deriving (Show)
 
 parsePankyOption :: String -> Maybe PankyOption
 parsePankyOption "V" = return $ Flag Verbose
