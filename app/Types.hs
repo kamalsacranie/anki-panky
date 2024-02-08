@@ -8,15 +8,13 @@ where
 
 import Control.Monad.State.Lazy (StateT)
 import Data.Set as Set (Set)
-import Data.Text as T
+import Data.Text.Lazy qualified as T
 
 data MediaItem where
-  DeckMedia :: FilePath -> String -> MediaItem
+  DeckMedia :: FilePath -> T.Text -> MediaItem
   deriving (Show, Eq, Ord)
 
 type DeckMediaSet = Set.Set MediaItem
-
--- type DeckMedia = [(Int, MediaItem)]
 
 type Panky a = StateT DeckGenInfo IO a
 

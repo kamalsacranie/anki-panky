@@ -11,8 +11,7 @@ import Data.Aeson.KeyMap qualified as AKM
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BL
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Text qualified as T
-import Data.Text.Lazy qualified as LT (toStrict, unpack)
+import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
 import Data.Time.Clock.POSIX (getPOSIXTime)
@@ -22,13 +21,14 @@ import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory)
 import Types (DeckGenInfo (..), Panky)
 import Types.Anki.JSON (Deck (..), Decks)
+import Types.CLI
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
 isValidFile :: BL.ByteString -> Bool
 isValidFile input = case decodeUtf8' input of
   Left _ -> False
-  Right res -> case LT.unpack res of
+  Right res -> case T.unpack res of
     ('-' : '-' : '-' : '\n' : _) -> True
     ('#' : ' ' : _) -> True
     _anyOtherFirstLine -> False
@@ -38,7 +38,7 @@ handleDeck conn modelKeys (InputFile path deckPrefix) = do
   byteTestInput <- liftIO $ BL.take 1000 <$> BL.readFile path
   when (isValidFile byteTestInput) $ do
     input <- liftIO $ LTO.readFile path
-    doc <- liftIO $ textToAst $ LT.toStrict input
+    doc <- liftIO $ textToAst input
     modify (\s -> s {filePath = Just path})
     renderedCards <- produceDeck doc
     if null renderedCards
@@ -68,9 +68,8 @@ handleDeck conn modelKeys (InputFile path deckPrefix) = do
                 }
 
         [[decksResult :: T.Text]] <- liftIO $ query_ conn (Query "SELECT decks FROM col")
-        liftIO $ print decksResult
-        let decks :: Decks = fromJust $ decodeStrictText decksResult
-        let appendedDecks = AKM.insert (AK.fromText $ T.pack (show dId)) newDeck decks
+        let decks :: Decks = fromJust $ decodeStrictText $ T.toStrict decksResult
+        let appendedDecks = AKM.insert (AK.fromString (show dId)) newDeck decks
         liftIO $ execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
         generateDeck conn modelKeys renderedCards
 
@@ -96,10 +95,6 @@ handleCol deckFiles = do
       genInfo
       deckFiles
   print finalState
-  -- let colConf = undefined -- get from col db
-  -- let dId = undefined -- get tail deck id from col db
-  -- let colConf' = colConf {activeDecksConf = Just [dId]}
-  -- update colConf
   writeDbToApkg finalState
 
 splitStringOnce :: Char -> String -> [String]
@@ -120,20 +115,20 @@ main = do
   trees <- mapM (`constructDeckTree` []) inputSources
   mapM_ handleCol [head trees]
 
-constructDeckTree :: FilePath -> [String] -> IO [DeckFile]
+constructDeckTree :: FilePath -> [T.Text] -> IO [DeckFile]
 constructDeckTree path s =
   doesDirectoryExist path
     >>= ( \case
             True -> do
               paths <- listDirectory path
               let deckName =
-                    if not (null [p | p <- paths, case p of ('.' : _) -> True; _ -> False])
+                    if not (null [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False])
                       then tail (head paths)
                       else case reverse path of
                         ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
                         _nonDirStylePath -> takeBaseName path
               let filesToProcess = [path ++ "/" ++ p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
-              let s' = s ++ [deckName]
+              let s' = s ++ [T.pack deckName]
               deckFiless <- mapM (`constructDeckTree` s') filesToProcess
               return $ concat deckFiless
             False -> return [InputFile path (DPos s)]
@@ -154,6 +149,6 @@ parseArgs ['-' : optString] = case parsePankyOption optString of
 parseArgs [x] = [SourcePath x]
 parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
   Just (Flag flag) -> PFlag flag : parseArgs (optv : xs)
-  Just (Opt kwarg) -> POpt kwarg optv : parseArgs xs
+  Just (Opt kwarg) -> POpt kwarg (T.pack optv) : parseArgs xs
   Nothing -> error $ "Invalid CLI arg -" ++ optString
 parseArgs (file : xs) = SourcePath file : parseArgs xs

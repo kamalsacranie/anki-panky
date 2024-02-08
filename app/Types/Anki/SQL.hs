@@ -5,7 +5,7 @@ module Types.Anki.SQL
   )
 where
 
-import Data.Text (Text)
+import Data.Text.Lazy qualified as T (Text)
 import Database.SQLite.Simple (FromRow, ToRow)
 import GHC.Generics
 
@@ -36,18 +36,18 @@ data Col where
       lsCol :: !Int,
       -- | The collections configuration. Text JSON of the type
       -- `Types.Anki.JSON.MConf`
-      confCol :: !Text,
-      -- | The models which are used in the collection. Text JSON of the type
+      confCol :: !T.Text,
+      -- | The models which are used in the collection. T.Text JSON of the type
       -- `Types.Anki.JSON.Models`
-      modelsCol :: !Text,
-      -- | The decks which are used in the collection. Text JSON of the type
+      modelsCol :: !T.Text,
+      -- | The decks which are used in the collection. T.Text JSON of the type
       -- `Types.Anki.JSON.Decks`
-      decksCol :: !Text,
-      -- | The deck configurations which are used in the collection. Text JSON
+      decksCol :: !T.Text,
+      -- | The deck configurations which are used in the collection. T.Text JSON
       -- of the type `Types.Anki.JSON.DeckConfs`
-      dconfCol :: !Text,
+      dconfCol :: !T.Text,
       -- | Currently unused. Should take the value of "{}"
-      tagsCol :: !Text
+      tagsCol :: !T.Text
     } ->
     Col
   deriving (Show, Generic, FromRow, ToRow)
@@ -65,7 +65,7 @@ data Note where
       -- | The global unique ID of the note, used to prevent notes from being
       -- duplicated when re-importing collections with the same notes. If the
       -- fields of the note remain unchages, the GUID should remain the same.
-      guidNote :: !Text,
+      guidNote :: !T.Text,
       -- | The ID of the `Types.Anki.JSON.Model` that the note uses.
       midNote :: !Int,
       -- | The time in of the modification in epoch SECONDS
@@ -74,20 +74,20 @@ data Note where
       -- changes have not been uploaded
       usnNote :: !Int,
       -- | A space separated list of tags related to the note
-      tagsNote :: !Text,
-      -- | The fields of the note. Text JSON of the type `Types.Anki.JSON.Fields`
-      fldsNote :: !Text,
+      tagsNote :: !T.Text,
+      -- | The fields of the note. T.Text JSON of the type `Types.Anki.JSON.Fields`
+      fldsNote :: !T.Text,
       -- | The note's sort field. This is used to sort the notes in Anki.
       -- Anki's database has this as an integer but we mark it as a string so
       -- that the field can be sorted.
-      sfldNote :: !Text,
+      sfldNote :: !T.Text,
       -- | The note's checksum. Used for duplicate check. It is an integer
       -- representation of first 8 digits of sha1 hash of the first field.
       csumNote :: !Int,
       -- | The note's flags. Currently unused. Should take the value of 0
       flagsNote :: !Int,
       -- | Currently unused. Should take the value of ""
-      dataNote :: !Text
+      dataNote :: !T.Text
     } ->
     Note
   deriving (Show, Generic, FromRow, ToRow)
@@ -162,7 +162,7 @@ data Card where
       -- no flag: 0. This integer divided by 8 represents currently nothing
       flagsCard :: !Int,
       -- Currently unused. Should take the value of ""
-      dataCard :: !Text
+      dataCard :: !T.Text
     } ->
     Card
   deriving (Show, Generic, FromRow, ToRow)

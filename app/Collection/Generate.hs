@@ -7,15 +7,14 @@ import Collection.Utils
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (gets)
 import Data.Aeson (decodeFileStrict, encode)
-import Data.Aeson.Key qualified as AK (fromString, fromText, toText)
+import Data.Aeson.Key qualified as AK (fromString, toString)
 import Data.Aeson.KeyMap qualified as AKM (fromList, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Text qualified as T
-import Data.Text.IO qualified as IOT
-import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy qualified as T
+import Data.Text.Lazy.IO qualified as IOT
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.Random
@@ -83,7 +82,7 @@ setupCollectionDb conn = do
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
-  mapM_ (execute_ conn . Query) queryString
+  mapM_ (execute_ conn . Query . T.toStrict) queryString
 
   colMConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe MConf))
   temp <- IOT.readFile "./data/default-anki-json/models.json"
@@ -99,14 +98,14 @@ setupCollectionDb conn = do
       secEpoc = floor currTime :: Int
 
   -- TODO: Handle multiple models
-  let modelId = T.pack $ show miliEpoc
+  let modelId = show miliEpoc
   let colModels =
         AKM.fromList
-          [ ( AK.fromText modelId,
+          [ ( AK.fromString modelId,
               colModelDefault
                 { cssModel = Just cssDefault,
                   didModel = Nothing, -- update the did later
-                  idModel = Just modelId,
+                  idModel = Just $ T.pack modelId,
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
                   modModel = Just secEpoc,
@@ -116,9 +115,9 @@ setupCollectionDb conn = do
           ] ::
           Models
 
-  let modelKeyTexts = AK.toText <$> AKM.keys colModels
-      modelKeys = read . T.unpack <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
-  let colConf = colMConfDefault {curModelMConf = Just (last modelKeyTexts)}
+  let modelKeyTexts = AK.toString <$> AKM.keys colModels
+      modelKeys = read <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
+  let colConf = colMConfDefault {curModelMConf = Just $ T.pack (last modelKeyTexts)}
 
   execute
     conn
@@ -132,8 +131,8 @@ setupCollectionDb conn = do
         dtyCol = 0, -- All collections generated will be clean
         usnCol = 0,
         lsCol = 0, -- last sync time, not important for a new deck
-        confCol = TL.toStrict $ encodeToLazyText colConf, -- config
-        modelsCol = TL.toStrict $ encodeToLazyText colModels,
+        confCol = encodeToLazyText colConf, -- config
+        modelsCol = encodeToLazyText colModels,
         decksCol = "{}",
         dconfCol = colDConf,
         tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)

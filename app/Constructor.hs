@@ -11,7 +11,8 @@ import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (State, gets, modify, runState)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set as Set
-import Data.Text qualified as T
+import Data.Text qualified as StrictT
+import Data.Text.Lazy qualified as T
 import System.FilePath (takeDirectory, (</>))
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
@@ -21,7 +22,7 @@ import Types.Parser as P
 textToAst :: T.Text -> IO Pandoc
 textToAst txt = do
   runIOorExplode $
-    readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True, readerStripComments = True} txt
+    readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True, readerStripComments = True} (T.toStrict txt)
 
 documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc)]
 documenttizeDeck document =
@@ -34,7 +35,7 @@ documenttizeDeck document =
 writeFlashCardHtml :: Pandoc -> IO T.Text
 writeFlashCardHtml p = do
   runIOorExplode $
-    writeHtml5String
+    writeHtml5LazyString
       ( def
           { writerExtensions = pandocExtensions,
             writerHTMLMathMethod = MathJax defaultMathJaxURL,
@@ -42,6 +43,8 @@ writeFlashCardHtml p = do
           }
       )
       p
+  where
+    writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
 renderDeck :: [(Pandoc, Pandoc)] -> IO [(T.Text, T.Text)]
 renderDeck = mapM single
@@ -52,7 +55,7 @@ cards :: Parser [P.Card]
 cards = many (extendedCard <|> simpleCard)
 
 metaValueToText :: MetaValue -> Maybe T.Text
-metaValueToText (MetaString s) = pure s
+metaValueToText (MetaString s) = pure (T.fromStrict s)
 metaValueToText (MetaInlines i) = renderMeta [Para i]
 metaValueToText (MetaBlocks b) = renderMeta b
 metaValueToText _ = Nothing
@@ -62,14 +65,14 @@ renderMeta metaValue =
   let plainTextMeta = runPure $ writePlain def (Pandoc nullMeta metaValue)
    in case plainTextMeta of
         Left _ -> Nothing
-        Right res -> Just (T.dropEnd 1 res)
+        Right res -> Just (T.dropEnd 1 (T.fromStrict res))
 
 mediaSetFromBlocks :: [Block] -> FilePath -> State DeckMediaSet [Block]
 mediaSetFromBlocks [] _ = return []
 mediaSetFromBlocks ((Figure a b [Plain [Image c d (url, e)]]) : xs) root = do
   let internalRep = textToIdentifier emptyExtensions url
-  let fullUrl = root </> T.unpack url
-  modify (Set.insert (DeckMedia fullUrl (T.unpack internalRep)))
+  let fullUrl = root </> StrictT.unpack url
+  modify (Set.insert (DeckMedia fullUrl (T.fromStrict internalRep)))
   blocks <- mediaSetFromBlocks xs root
   return (Figure a b [Plain [Image c d (internalRep, e)]] : blocks)
 mediaSetFromBlocks (x : xs) root = do

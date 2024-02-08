@@ -16,7 +16,7 @@ import Data.Aeson
     genericToJSON,
   )
 import Data.Aeson.KeyMap (KeyMap)
-import Data.Text qualified as T
+import Data.Text.Lazy qualified as T (Text)
 import GHC.Generics (Generic)
 
 -- We can fix the warnings here by using bytestrings if we don't want to import
