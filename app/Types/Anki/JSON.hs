@@ -99,7 +99,7 @@ data Model where
       -- that when Anki imports a collection, it adds a new model unless the
       -- model already exists. This means that you will want to have this value
       -- hardcoded
-      idModel :: Maybe T.Text,
+      idModel :: T.Text,
       -- | Latex post-amble string
       latexPostModel :: Maybe T.Text,
       -- | Latex preamble string

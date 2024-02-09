@@ -95,15 +95,12 @@ setupCollectionDb conn = do
   let miliEpoc = floor $ currTime * 1000 :: Int
       secEpoc = floor currTime :: Int
 
-  -- TODO: Handle multiple models
-  let modelId = show miliEpoc
   let colModels =
         AKM.fromList
-          [ ( AK.fromString modelId,
+          [ ( AK.fromString $ T.unpack (idModel colModelDefault),
               colModelDefault
                 { cssModel = Just cssDefault,
                   didModel = Nothing, -- update the did later
-                  idModel = Just $ T.pack modelId,
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
                   modModel = Just secEpoc,
