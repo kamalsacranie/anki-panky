@@ -73,7 +73,8 @@ executable anki-panky
         Types
         Collection.Generate
         Collection.Utils
-        Constructor
+        Utils
+        Render
 
     -- LANGUAGE extensions used by all the modules in the package.
     default-extensions:

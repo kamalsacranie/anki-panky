@@ -8,7 +8,7 @@
 - [x] We need to create a new monad wherever we use genInfo
 - [ ] Integrate pandoc crossref (nvm we can use the internal cross ref
   functionality extension)
-- [ ] Fix bug where if we comment out the yaml header, the cards does not
+- [x] Fix bug where if we comment out the yaml header, the cards does not
   process properly
 - [x] make everything lazy
 - [ ] Assign hard-coded model values to models as they are otherwise duplicated
@@ -18,3 +18,6 @@
 - [ ] homogenise the mili epoch times
 - [ ] Finish type implementations for JSON objects
 - [ ] Decouple the renaming of deck from deck rendering
+- [ ] Look how to properly use the maybe monad so I can do error handling more
+  nicerer
+- [ ] Use special html to have tags

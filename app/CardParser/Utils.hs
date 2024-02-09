@@ -3,10 +3,17 @@
 
 module CardParser.Utils where
 
-import CardParser.Parser
 import Control.Applicative
 import Text.Pandoc
 import Types.Parser
+
+item :: Parser Block
+item =
+  P
+    ( \case
+        [] -> []
+        (x : xs) -> [(x, xs)]
+    )
 
 satisfyBlock :: (Block -> Bool) -> Parser Block
 satisfyBlock f = do

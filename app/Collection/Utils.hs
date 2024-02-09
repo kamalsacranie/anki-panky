@@ -1,12 +1,42 @@
-module Collection.Utils (removeIfExists, genNoteGuid) where
+{-# LANGUAGE OverloadedStrings #-}
+
+module Collection.Utils (removeIfExists, genNoteGuid, handleMeta) where
 
 import Control.Monad (when)
+import Control.Monad.RWS (modify)
 import Crypto.Hash.SHA256 (hash)
 import Data.ByteString qualified as BS (ByteString, take)
 import Data.ByteString.Char8 qualified as BSC (foldl', pack)
 import Data.Char (ord)
 import Data.List (intercalate)
+import Data.Maybe (fromMaybe)
+import Data.Text.Lazy qualified as T
 import System.Directory (doesFileExist, removeFile)
+import Text.Pandoc hiding (getPOSIXTime)
+import Types (DeckGenInfo (deckName), Panky)
+import Types.CLI (DeckPos)
+
+metaValueToText :: MetaValue -> Maybe T.Text
+metaValueToText (MetaString s) = pure (T.fromStrict s)
+metaValueToText (MetaInlines i) = renderMeta [Para i]
+metaValueToText (MetaBlocks b) = renderMeta b
+metaValueToText _ = Nothing
+
+renderMeta :: [Block] -> Maybe T.Text
+renderMeta metaValue =
+  let plainTextMeta = runPure $ writePlain def (Pandoc nullMeta metaValue)
+   in case plainTextMeta of
+        Left _ -> Nothing
+        Right res -> Just (T.dropEnd 1 (T.fromStrict res))
+
+handleMeta :: Pandoc -> DeckPos -> Panky ()
+handleMeta (Pandoc meta _) dpos = do
+  let documentName = lookupMeta "name" meta
+  modify
+    ( \st -> case documentName of
+        Nothing -> st
+        Just name -> st {deckName = T.pack (show dpos ++ "::") <> fromMaybe (deckName st) (metaValueToText name)}
+    )
 
 genNoteGuid :: String -> String -> [String] -> String
 genNoteGuid x y rest = genNoteGuid' $ BSC.pack (intercalate "__" (x : y : rest))

@@ -5,26 +5,26 @@ module Collection.Generate where
 import Codec.Archive.Zip
 import Collection.Utils (genNoteGuid, removeIfExists)
 import Control.Monad.Cont (MonadIO (liftIO))
-import Control.Monad.State (gets)
-import Data.Aeson (decodeFileStrict, encode)
+import Control.Monad.State (StateT (runStateT), gets)
+import Data.Aeson (decodeFileStrict, decodeStrictText, encode)
 import Data.Aeson.Key qualified as AK (fromString, toString)
-import Data.Aeson.KeyMap qualified as AKM (fromList, keys)
+import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
-import Data.Maybe (fromJust)
+import Data.Functor (($>))
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as IOT
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
-import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky)
-import Types.Anki.JSON (MConf (..), Model (..), Models)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedDeck)
+import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
 
 addCard :: Int -> Connection -> (T.Text, T.Text) -> Panky ()
 addCard modelId conn (front, back) = do
   noteGUID <- gets ((\dn -> genNoteGuid (T.unpack dn) (T.unpack front) []) . deckName)
-  liftIO $ putStrLn noteGUID
 
   -- technically these should be miliseconds but its not fast enought
   noteId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
@@ -152,5 +152,30 @@ writeDbToApkg media colName = do
 createCollectionDb :: IO Connection
 createCollectionDb = removeIfExists dbPath *> open dbPath
 
-generateDeck :: Connection -> [Int] -> [(T.Text, T.Text)] -> Panky ()
-generateDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
+addCardsToDeck :: Connection -> [Int] -> [(T.Text, T.Text)] -> Panky ()
+addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
+
+generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
+generateDeck conn modelKeys renderedDeck genInfo = do
+  miliEpoc :: Int <- floor . (* 10000) <$> getPOSIXTime
+  colDeckDefault <-
+    fromMaybe
+      (error "Could not read default deck.json file")
+      <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
+  let newDeck =
+        colDeckDefault
+          { confDeck = Just 1,
+            idDeck = Just (deckId genInfo),
+            modDeck = Just miliEpoc,
+            nameDeck = Just (deckName genInfo)
+          }
+
+  putStrLn $ "Rendering deck: " ++ show (deckName genInfo)
+  [[decksResult :: T.Text]] <- query_ conn (Query "SELECT decks FROM col")
+  let decks :: Decks =
+        fromMaybe
+          (error "Could not read decks field from collection DB table")
+          (decodeStrictText $ T.toStrict decksResult)
+      appendedDecks = AKM.insert (AK.fromString (show (deckId genInfo))) newDeck decks
+  execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
+  runStateT (addCardsToDeck conn modelKeys renderedDeck) genInfo $> ()
