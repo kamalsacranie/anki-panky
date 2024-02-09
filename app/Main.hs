@@ -19,7 +19,7 @@ import Database.SQLite.Simple (Connection, Only (Only), Query (Query), execute, 
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory)
-import Types (DeckGenInfo (..), MediaDeck)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem)
 import Types.Anki.JSON (Deck (..), Decks)
 import Types.CLI
 
@@ -33,7 +33,7 @@ isValidFile input = case decodeUtf8' input of
     ('#' : ' ' : _) -> True
     _anyOtherFirstLine -> False
 
-handleDeck :: Connection -> [Int] -> DeckFile -> IO MediaDeck
+handleDeck :: Connection -> [Int] -> DeckFile -> IO [MediaItem]
 handleDeck conn modelKeys (InputFile path deckPrefix) = do
   byteTestInput <- BL.take 1000 <$> BL.readFile path
   if isValidFile byteTestInput
@@ -75,7 +75,9 @@ handleCol deckFiles colName = do
   c <- createCollectionDb
   modelKeys <- setupCollectionDb c
   mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
-  writeDbToApkg mediaFiles colName
+  let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
+  print mediaDeck
+  writeDbToApkg mediaDeck colName
 
 takeBasePathName :: FilePath -> String
 takeBasePathName path = case reverse path of

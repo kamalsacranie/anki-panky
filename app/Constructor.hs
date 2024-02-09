@@ -16,7 +16,7 @@ import Data.Text.Lazy qualified as T
 import System.FilePath (takeDirectory, (</>))
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
-import Types (DeckGenInfo (..), DeckMediaSet, MediaDeck, MediaItem (DeckMedia), Panky, RenderedDeck)
+import Types (DeckGenInfo (..), DeckMediaSet, MediaItem (DeckMedia), Panky, RenderedDeck)
 import Types.CLI (DeckPos)
 import Types.Parser as P
 
@@ -82,7 +82,7 @@ mediaSetFromBlocks (x : xs) root = do
 
 -- | Returns a list of tuples which contain rendered HTML for the front and
 -- | back of the cards provided in the order that they appeared
-produceDeck :: Pandoc -> DeckPos -> Panky (RenderedDeck, MediaDeck)
+produceDeck :: Pandoc -> DeckPos -> Panky (RenderedDeck, [MediaItem])
 produceDeck (Pandoc meta blocks') dpos = do
   fp <- gets deckPath
   let (blocks, media) = runState (mediaSetFromBlocks blocks' (takeDirectory fp)) Set.empty
@@ -94,4 +94,4 @@ produceDeck (Pandoc meta blocks') dpos = do
     )
   let deck = concat $ parseAll cards blocks
       docDeck = documenttizeDeck (Pandoc meta) deck
-  liftIO $ (,zip [0 :: Int ..] (Set.toList media)) <$> renderDeck docDeck
+  liftIO $ (,Set.toList media) <$> renderDeck docDeck

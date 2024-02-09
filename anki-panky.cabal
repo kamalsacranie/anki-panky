@@ -82,7 +82,9 @@ executable anki-panky
 
     -- Other library packages from which modules are imported.
     build-depends:  
+        cryptohash-sha256,
         time,
+        base16-bytestring,
         filepath,
         containers,
         random,

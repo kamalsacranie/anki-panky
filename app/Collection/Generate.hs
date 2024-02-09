@@ -3,7 +3,7 @@
 module Collection.Generate where
 
 import Codec.Archive.Zip
-import Collection.Utils
+import Collection.Utils (genNoteGuid, removeIfExists)
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (gets)
 import Data.Aeson (decodeFileStrict, encode)
@@ -12,21 +12,19 @@ import Data.Aeson.KeyMap qualified as AKM (fromList, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as IOT
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
-import System.Random
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky)
 import Types.Anki.JSON (MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
 
 addCard :: Int -> Connection -> (T.Text, T.Text) -> Panky ()
 addCard modelId conn (front, back) = do
-  gen <- getStdGen
-  let noteGUID :: Int
-      noteGUID = fst $ random gen
+  noteGUID <- gets ((\dn -> genNoteGuid (T.unpack dn) (T.unpack front) []) . deckName)
+  liftIO $ putStrLn noteGUID
 
   -- technically these should be miliseconds but its not fast enought
   noteId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
@@ -36,7 +34,7 @@ addCard modelId conn (front, back) = do
       "INSERT INTO notes VALUES(?,?,?,?,?,?,?,?,?,?,?)"
       ANS.Note
         { idNote = noteId,
-          guidNote = T.pack $ show noteGUID,
+          guidNote = T.pack noteGUID,
           midNote = modelId,
           modNote = noteId,
           usnNote = -1,
