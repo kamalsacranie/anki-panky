@@ -132,25 +132,22 @@ setupCollectionDb conn = do
       }
   return modelKeys
 
-dbPath :: FilePath
-dbPath = "collection.anki2" -- required name for the anki db
-
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
 generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
 
-writeDbToApkg :: MediaDeck -> T.Text -> IO ()
-writeDbToApkg media colName = do
+writeDbToApkg :: MediaDeck -> T.Text -> FilePath -> IO ()
+writeDbToApkg media colName dbpath = do
   let archivePath = "collection.anki2"
   mentry <- mapM generateMediaEntry media
   let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
   mediajsonFile <- toEntry "media" . round <$> getPOSIXTime <*> pure mediajson
-  cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbPath
+  cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbpath
   let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
-      archiveName = colName <> ".apkg" -- should be the package name
+      archiveName = colName <> ".apkg"
   BS.writeFile (T.unpack archiveName) $ fromArchive archive
 
-createCollectionDb :: IO Connection
-createCollectionDb = removeIfExists dbPath *> open dbPath
+createCollectionDb :: FilePath -> IO Connection
+createCollectionDb dbpath = removeIfExists dbpath *> open dbpath
 
 addCardsToDeck :: Connection -> [Int] -> RenderedDeck -> Panky ()
 addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)

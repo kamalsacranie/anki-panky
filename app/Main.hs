@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+import System.FilePath.Posix ((</>))
+import System.Posix.Temp
 import Collection.Generate
 import Collection.Utils (handleMeta)
 import Control.Monad.State.Lazy
@@ -56,13 +58,20 @@ handleDeck' conn modelKeys (InputFile path deckPrefix) = do
     then print ("Skipping file " ++ path ++ " as it failed to parse its cards") $> []
     else generateDeck conn modelKeys renderedDeck genInfo $> mediaFiles
 
+dbPath :: IO FilePath
+dbPath = do
+  temppath <- mkdtemp "/tmp/anki-panky"
+  let filepath = temppath </> "collection.anki2"
+  return filepath
+
 handleCol :: [DeckFile] -> T.Text -> IO ()
 handleCol deckFiles colName = do
-  c <- createCollectionDb
+  dbpath <- dbPath
+  c <- createCollectionDb dbpath
   modelKeys <- setupCollectionDb c
   mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
   let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
-  writeDbToApkg mediaDeck colName
+  writeDbToApkg mediaDeck colName dbpath
 
 takeBasePathName :: FilePath -> String
 takeBasePathName path = case reverse path of
