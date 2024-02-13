@@ -20,4 +20,4 @@
 - [ ] Decouple the renaming of deck from deck rendering
 - [ ] Look how to properly use the maybe monad so I can do error handling more
   nicerer
-- [ ] Use special html to have tags
+- [x] Use special html to have tags

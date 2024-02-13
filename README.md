@@ -1,11 +1,10 @@
----
-format: pdf
----
-
 <!-- TODO: Make Logo With Project Title underneath -->
 
 Anki Panky is a **Pandoc Markdown** to [Anki](https://apps.ankiweb.net)
 ***hierarchical*** flashcard deck generator.
+
+> Basically, most stuff you can do in Pandoc translates into HTML into your
+> cards!!!!! How good
 
 # Two-minute sales pitch
 
@@ -40,7 +39,16 @@ wanted for the MVP was the following:
 - Use media from **wherever I want in my file system**.
 - There should be some basic avoidance for duplication when importing to Anki.
 
-# Installation
+# Feature overview
+
+- Uses bog-standard Pandoc syntax
+- Syntax doesn't interfere with other Pandoc output formats
+- Arbitrarily nested collection directory structure
+- Use images from anywhere in your file system. They **do not need to be
+  colocated with your markdown decks**.
+- You can use any file extension for your markdown decks. They don't need to
+  have a `.md`
+- You can add tags to your cards
 
 # Card syntax
 
@@ -107,4 +115,57 @@ extended card. Hence, this is still the front
 This is now the back
 ```
 
-# Usage
+## Adding tags to cards
+
+You can also assign tags to cards by using the `AnkiTags` HTML tag. The tags for
+the card is the list of space-separated tags which follow the tag. For example:
+
+```markdown
+. . .
+
+This is the back of my card
+
+<AnkiTags this-is my tag list/>
+```
+
+Note that the tags must be at the **end of the card** as the last paragraph.
+
+## Images
+
+You can use images as you would in a regular markdown document. The get mapped
+correctly in the .apkg file.
+
+```markdown
+![This is the alt text](path/to/image.png)
+```
+
+---
+
+For some examples of how to use anything, you can check the `test-dir` file in
+the repo.
+
+# Naming your deck/subdecks
+
+The default name for your collection/deck is the name of the input file/folder.
+If you want to specify the name of a markdown deck **file**, you can add the
+following metadata to the top of your file:
+
+```markdown
+---
+name: My Deck Name
+---
+```
+
+If my file name was for example `my-deck.md`, then the name of the deck would be
+"{prefix}::My Deck Name".
+
+**You can name a folder of decks using a dotfile**. If you want all decks in a
+folder to be prefixed by a certain name, you can add a `.My Deck Name` file to
+the (the name of the file can be anything). Hence, the name of your collection
+will be "{prefix}::My Deck Name::{subdeck-name}::...etc".
+
+> Note, ***you can have arbitrarily nested directories***
+
+# To be added
+
+- [ ] specify output directory with the `-o`/`--output <path>` option

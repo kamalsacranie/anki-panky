@@ -2,8 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import System.FilePath.Posix ((</>))
-import System.Posix.Temp
 import Collection.Generate
 import Collection.Utils (handleMeta)
 import Control.Monad.State.Lazy
@@ -18,6 +16,7 @@ import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
+import System.Posix.Temp
 import Types (DeckGenInfo (..), MediaDeck, MediaItem)
 import Types.CLI
 import Utils (splitListOnce)
