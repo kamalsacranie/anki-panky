@@ -38,4 +38,4 @@ cardExtendedFront = do
   return (ExtendedFront (h ++ body))
 
 extendedCard :: Parser Card
-extendedCard = cardExtendedFront >>= \front -> Card front <$> cardBack
+extendedCard = cardExtendedFront >>= \front -> uncurry (Card front) <$> cardBack

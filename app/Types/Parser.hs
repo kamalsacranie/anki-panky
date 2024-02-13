@@ -49,8 +49,14 @@ data Front where
 -- file
 type Back = [Block]
 
+newtype CardTags where
+  CTags :: [String] -> CardTags
+
+instance Show CardTags where
+  show (CTags tags) = unwords tags
+
 -- | An abstract representation of a card
 data Card where
   -- | A card is just a front and a back
-  Card :: Front -> Back -> Card
+  Card :: Front -> Back -> CardTags -> Card
   deriving (Show)

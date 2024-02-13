@@ -12,4 +12,4 @@ cardSimpleFront = do
   return (SimpleFront h1)
 
 simpleCard :: Parser Card
-simpleCard = cardSimpleFront >>= \front -> Card front <$> cardBack
+simpleCard = cardSimpleFront >>= \front -> uncurry (Card front) <$> cardBack

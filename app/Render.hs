@@ -10,20 +10,20 @@ import Data.Text.Lazy qualified as T
 import System.FilePath (takeDirectory, (</>))
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
+import Types (DeckMediaSet, MediaItem (DeckMedia), RenderedCard (RCard), RenderedDeck)
 import Types.Parser as P
-import Types (RenderedDeck, DeckMediaSet, MediaItem (DeckMedia))
 
 renderMDtoNative :: T.Text -> IO Pandoc
 renderMDtoNative txt = do
   runIOorExplode $
     readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True, readerStripComments = True} (T.toStrict txt)
 
-documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc)]
+documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc, CardTags)]
 documenttizeDeck document =
   map
     ( \case
-        (P.Card (SimpleFront f) fv) -> (document [f], document fv)
-        (P.Card (ExtendedFront f) fv) -> (document f, document fv)
+        (P.Card (SimpleFront f) fv tags) -> (document [f], document fv, tags)
+        (P.Card (ExtendedFront f) fv tags) -> (document f, document fv, tags)
     )
 
 writeFlashCardHtml :: Pandoc -> IO T.Text
@@ -40,10 +40,10 @@ writeFlashCardHtml p = do
   where
     writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
-renderDeck :: [(Pandoc, Pandoc)] -> IO RenderedDeck
+renderDeck :: [(Pandoc, Pandoc, CardTags)] -> IO RenderedDeck
 renderDeck = mapM single
   where
-    single (f, b) = ((,) <$> writeFlashCardHtml f) <*> writeFlashCardHtml b
+    single (f, b, tags) = RCard <$> writeFlashCardHtml f <*> writeFlashCardHtml b <*> pure tags
 
 mediaSetFromBlocks :: [Block] -> FilePath -> State DeckMediaSet [Block]
 mediaSetFromBlocks [] _ = return []

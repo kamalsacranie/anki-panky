@@ -18,12 +18,12 @@ import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as IOT
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
-import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedDeck)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedCard (RCard), RenderedDeck)
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
 
-addCard :: Int -> Connection -> (T.Text, T.Text) -> Panky ()
-addCard modelId conn (front, back) = do
+addCard :: Int -> Connection -> RenderedCard -> Panky ()
+addCard modelId conn (RCard front back tags) = do
   noteGUID <- gets ((\dn -> genNoteGuid (T.unpack dn) (T.unpack front) []) . deckName)
 
   -- technically these should be miliseconds but its not fast enought
@@ -38,7 +38,7 @@ addCard modelId conn (front, back) = do
           midNote = modelId,
           modNote = noteId,
           usnNote = -1,
-          tagsNote = "",
+          tagsNote = T.pack $ show tags,
           fldsNote = front <> T.singleton (chr 0x1f) <> back <> T.singleton (chr 0x1f) <> T.pack (show noteGUID),
           sfldNote = front,
           csumNote = 0,
@@ -152,7 +152,7 @@ writeDbToApkg media colName = do
 createCollectionDb :: IO Connection
 createCollectionDb = removeIfExists dbPath *> open dbPath
 
-addCardsToDeck :: Connection -> [Int] -> [(T.Text, T.Text)] -> Panky ()
+addCardsToDeck :: Connection -> [Int] -> RenderedDeck -> Panky ()
 addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
 
 generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
