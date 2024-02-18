@@ -1,0 +1,24 @@
+name: Build Releases
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: macos-11
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download GHCUP
+      run: |
+        curl -LO https://downloads.haskell.org/~ghcup/x86_64-apple-darwin-ghcup
+        chmod +x ./x86_64-apple-darwin-ghcup
+
+    - name: Install GHC & Cabal
+      run: |
+        ./x86_64-apple-darwin-ghcup install ghc 9.4.8
+        ./x86_64-apple-darwin-ghcup install cabal recommended
+        export PATH=$HOME/.ghcup/ghc/9.4.8/bin:$PATH
+
+    - name: Compile anki-panky
+      run: |
+        cabal new-build

@@ -101,7 +101,7 @@ executable anki-panky
         text,
         pandoc-types,
         pandoc,
-        base ^>=4.17.2.0
+        base
 
     -- Directories containing source files.
     hs-source-dirs:   app
