@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Collection.Generate where
 
@@ -6,16 +7,18 @@ import Codec.Archive.Zip
 import Collection.Utils (genNoteGuid, removeIfExists)
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (StateT (runStateT), gets)
-import Data.Aeson (decodeFileStrict, decodeStrictText, encode)
+import Data.Aeson (decode, decodeFileStrict, decodeStrictText, encode)
 import Data.Aeson.Key qualified as AK (fromString, toString)
 import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Bifunctor (second)
 import Data.ByteString.Lazy qualified as BS
 import Data.Char (chr)
+import Data.FileEmbed (embedDir, embedFile)
 import Data.Functor (($>))
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text.Lazy qualified as T
-import Data.Text.Lazy.IO qualified as IOT
+import Data.Text.Lazy.Encoding qualified as TE
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedCard (RCard), RenderedDeck)
@@ -75,19 +78,20 @@ addCard modelId conn (RCard front back tags) = do
 
 setupCollectionDb :: Connection -> IO [Int]
 setupCollectionDb conn = do
-  queries <- IOT.readFile "./data/setup-migrations.sql"
+  let dataFiles = map (second BS.fromStrict) $(embedDir "data")
+  let queries = TE.decodeUtf8 $ fromJust $ lookup "setup-migrations.sql" dataFiles
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
   mapM_ (execute_ conn . Query . T.toStrict) queryString
 
-  colMConfDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/conf.json" :: IO (Maybe MConf))
-  colModelDefault <- fromJust <$> (decodeFileStrict "./data/default-anki-json/models.json" :: IO (Maybe Model))
-  colDConf <- IOT.readFile "./data/default-anki-json/dconf.json"
-  cssDefault <- IOT.readFile "./data/css/card.css"
-  latexPre <- IOT.readFile "./data/latex/preamble.tex"
-  latexPost <- IOT.readFile "./data/latex/postamble.tex"
+  let colMConfDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/conf.json" dataFiles) :: Maybe MConf)
+  let colModelDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/models.json" dataFiles) :: Maybe Model)
+  let colDConf = TE.decodeUtf8 $ fromJust $ lookup "default-anki-json/dconf.json" dataFiles
+  let cssDefault = TE.decodeUtf8 $ fromJust $ lookup "css/card.css" dataFiles
+  let latexPre = TE.decodeUtf8 $ fromJust $ lookup "latex/preamble.tex" dataFiles
+  let latexPost = TE.decodeUtf8 $ fromJust $ lookup "latex/postamble.tex" dataFiles
 
   currTime <- getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
@@ -155,10 +159,8 @@ addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
 generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
 generateDeck conn modelKeys renderedDeck genInfo = do
   miliEpoc :: Int <- floor . (* 10000) <$> getPOSIXTime
-  colDeckDefault <-
-    fromMaybe
-      (error "Could not read default deck.json file")
-      <$> (decodeFileStrict "./data/default-anki-json/deck.json" :: IO (Maybe Deck))
+  let colDeckDefaultRaw = BS.fromStrict $(embedFile "data/default-anki-json/deck.json")
+  let colDeckDefault = fromMaybe (error "Could not read default deck.json file") $ decode colDeckDefaultRaw
   let newDeck =
         colDeckDefault
           { confDeck = Just 1,
