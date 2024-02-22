@@ -1,27 +1,52 @@
 name: Build Releases
 
-on: workflow_dispatch
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  build:
-    runs-on: macos-11
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-11]
+        cabal: ["3.10.2.1"]
+        ghc:
+          - "9.4.8"
+
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v2
 
-    - name: Download GHCUP
-      run: |
-        curl -LO https://downloads.haskell.org/~ghcup/x86_64-apple-darwin-ghcup
-        chmod +x ./x86_64-apple-darwin-ghcup
+    - uses: haskell-actions/setup@v2
+      id: setup-haskell-cabal
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
 
-    - name: Install GHC & Cabal
-      run: |
-        ./x86_64-apple-darwin-ghcup install ghc 9.4.8
-        ./x86_64-apple-darwin-ghcup install cabal recommended
-        export PATH=$HOME/.ghcup/ghc/9.4.8/bin:$PATH
-        ./x86_64-apple-darwin-ghcup set ghc 9.4.8
+    # - name: Configure
+    #   run: |
+    #     cabal configure --enable-tests --enable-benchmarks --enable-documentation --test-show-details=direct --write-ghc-environment-files=always
 
-    - name: Compile anki-panky
+    # - name: Freeze
+    #   run: |
+    #     cabal freeze
+
+    - uses: actions/cache@v3
+      name: Cache ~/.cabal/store
+      with:
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+
+    - name: Install dependencies
       run: |
-        cabal update
-        ghc --version
-        cabal build
+        cabal build all --only-dependencies
+
+    - name: Build
+      run: |
+        cabal build all
