@@ -3,7 +3,7 @@ module Types.CLI
     PankyArg (SourcePath, PFlag, POpt),
     PankyOption (Flag, Opt),
     DeckPos (DPos),
-    PankyFlag (Verbose),
+    PankyFlag (Verbose, Version),
     PankyKWarg (DeckName),
     CollectionDir (ColDir),
   )
@@ -39,12 +39,13 @@ data CollectionDir where
 -- | A flag argument passed to anki-panky from the command line.
 data PankyFlag
   = Verbose
-  deriving (Show)
+  | Version
+  deriving (Eq, Show)
 
 -- | A keyword argument passed to anki-panky from the command line.
 data PankyKWarg
   = DeckName
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | Used as a type to distinguish between flags and keyword arguments.
 data PankyOption where
@@ -61,4 +62,4 @@ data PankyArg where
   -- | A `PankyKWarg` representing a keyword argument passed via the command
   -- line
   POpt :: PankyKWarg -> T.Text -> PankyArg
-  deriving (Show)
+  deriving (Eq, Show)

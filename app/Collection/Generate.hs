@@ -7,7 +7,7 @@ import Codec.Archive.Zip
 import Collection.Utils (genNoteGuid, removeIfExists)
 import Control.Monad.Cont (MonadIO (liftIO))
 import Control.Monad.State (StateT (runStateT), gets)
-import Data.Aeson (decode, decodeFileStrict, decodeStrictText, encode)
+import Data.Aeson (decode, decodeStrictText, encode)
 import Data.Aeson.Key qualified as AK (fromString, toString)
 import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
 import Data.Aeson.Text (encodeToLazyText)

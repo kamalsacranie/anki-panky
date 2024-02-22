@@ -20,7 +20,7 @@ name:               anki-panky
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.1.0.0
+version:            0.0.0.1
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -75,6 +75,7 @@ executable anki-panky
         Collection.Utils
         Utils
         Render
+        Paths_anki_panky
 
     -- LANGUAGE extensions used by all the modules in the package.
     default-extensions:

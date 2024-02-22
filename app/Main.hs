@@ -11,10 +11,13 @@ import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Version (showVersion)
 import Database.SQLite.Simple (Connection)
+import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
 import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
+import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
 import System.Posix.Temp
 import Types (DeckGenInfo (..), MediaDeck, MediaItem)
@@ -99,6 +102,8 @@ constructDeckTree path s =
 parsePankyOption :: String -> Maybe PankyOption
 parsePankyOption "V" = return $ Flag Verbose
 parsePankyOption "-verbose" = return $ Flag Verbose
+parsePankyOption "v" = return $ Flag Version
+parsePankyOption "-version" = return $ Flag Version
 parsePankyOption "-name" = return $ Opt DeckName
 parsePankyOption _ = Nothing
 
@@ -121,7 +126,9 @@ main = do
   let args = parseArgs rawArgs
 
   inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
-  let _opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
+  let opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
+
+  when (PFlag Version `elem` opts) $ putStrLn (showVersion version) *> exitSuccess
 
   trees <-
     mapM

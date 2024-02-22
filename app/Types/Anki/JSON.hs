@@ -72,10 +72,10 @@ instance FromJSON Deck where
 type Decks = KeyMap Deck
 
 -- | A deck configureation: UNIMPLEMENTED
-data DeckConf = DeckConfig {}
+-- data DeckConf = DeckConfig {}
 
 -- | A key map of deck configurations where the `Key` is the deck id
-type DeckConfs = KeyMap DeckConf
+-- type DeckConfs = KeyMap DeckConf
 
 -- Figure out how to apply a function to all the fields of a record. I.e.,
 -- unmabe all the fields and cast it to a strict version. Surely there is a way
