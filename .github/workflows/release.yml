@@ -50,3 +50,13 @@ jobs:
     - name: Build
       run: |
         cabal build all
+
+    - name: Archive
+      run: |
+        cp $(cabal list-bin . | head -n 1) . && tar -cvzf ${{ matrix.os }}-anki-panky-${{ github.ref_name }}.tar.gz anki-panky
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: ${{ matrix.os }}-anki-panky-${{ github.ref_name }}.tar.gz
