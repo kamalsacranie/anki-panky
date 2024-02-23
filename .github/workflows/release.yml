@@ -14,10 +14,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-11]
+        os: [ubuntu-latest, macos-11, windows-latest]
         cabal: ["3.10.2.1"]
         ghc:
           - "9.4.8"
+        exe_suffix: [x86_64-ubuntu, x86_64-macos, x86_64-windows]
 
     steps:
     - uses: actions/checkout@v2
@@ -50,3 +51,13 @@ jobs:
     - name: Build
       run: |
         cabal build all
+
+    - name: Archive
+      run: |
+        cp $(cabal list-bin . | head -n 1) . && tar -cvzf anki-panky-${{ github.ref_name }}-${{ matrix.exe_suffix }}.tar.gz anki-panky
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: anki-panky-${{ github.ref_name }}-${{ matrix.exe_suffix }}.tar.gz
