@@ -35,7 +35,7 @@ handleMeta (Pandoc meta _) dpos = do
   modify
     ( \st -> case documentName of
         Nothing -> st
-        Just name -> st {deckName = T.pack (show dpos ++ "::") <> fromMaybe (deckName st) (metaValueToText name)}
+        Just name -> st {deckName = T.pack (show dpos) <> fromMaybe (deckName st) (metaValueToText name)}
     )
 
 genNoteGuid :: String -> String -> [String] -> String

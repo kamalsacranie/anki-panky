@@ -21,6 +21,7 @@ import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.Encoding qualified as TE
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
+import System.FilePath ((</>))
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedCard (RCard), RenderedDeck)
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
@@ -139,8 +140,8 @@ setupCollectionDb conn = do
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
 generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
 
-writeDbToApkg :: MediaDeck -> T.Text -> FilePath -> IO ()
-writeDbToApkg media colName dbpath = do
+writeDbToApkg :: MediaDeck -> T.Text -> FilePath -> FilePath -> IO ()
+writeDbToApkg media colName dbpath outputDir = do
   let archivePath = "collection.anki2"
   mentry <- mapM generateMediaEntry media
   let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
@@ -148,7 +149,7 @@ writeDbToApkg media colName dbpath = do
   cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbpath
   let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
       archiveName = colName <> ".apkg"
-  BS.writeFile (T.unpack archiveName) $ fromArchive archive
+  BS.writeFile (outputDir </> T.unpack archiveName) $ fromArchive archive
 
 createCollectionDb :: FilePath -> IO Connection
 createCollectionDb dbpath = removeIfExists dbpath *> open dbpath

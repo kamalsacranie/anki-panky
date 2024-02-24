@@ -15,7 +15,7 @@ import Data.Version (showVersion)
 import Database.SQLite.Simple (Connection)
 import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
-import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
@@ -48,7 +48,7 @@ handleDeck' conn modelKeys (InputFile path deckPrefix) = do
         DGInfo
           { deckPath = path,
             deckFileName = takeBaseName path,
-            deckName = T.pack (show deckPrefix ++ "::" ++ takeBaseName path),
+            deckName = T.pack (show deckPrefix ++ takeBaseName path),
             deckId = miliEpoc
           }
   input <- LTO.readFile path
@@ -66,14 +66,14 @@ dbPath = do
   let filepath = temppath </> "collection.anki2"
   return filepath
 
-handleCol :: [DeckFile] -> T.Text -> IO ()
-handleCol deckFiles colName = do
+handleCol :: [DeckFile] -> T.Text -> PankyConfig -> IO ()
+handleCol deckFiles colName pankyConf = do
   dbpath <- dbPath
   c <- createCollectionDb dbpath
   modelKeys <- setupCollectionDb c
   mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
   let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
-  writeDbToApkg mediaDeck colName dbpath
+  writeDbToApkg mediaDeck colName dbpath (outputDirPConf pankyConf)
 
 takeBasePathName :: FilePath -> String
 takeBasePathName path = case reverse path of
@@ -81,7 +81,7 @@ takeBasePathName path = case reverse path of
   _nonDirStylePath -> takeBaseName path
 
 constructDeckTree' :: FilePath -> [T.Text] -> IO [DeckFile]
-constructDeckTree' path prefix = do
+constructDeckTree' path prefList = do
   paths <- listDirectory path
   let specialFiles = [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False]
       filesToProcess = [path </> p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
@@ -89,15 +89,15 @@ constructDeckTree' path prefix = do
         if not (null specialFiles)
           then tail (head specialFiles)
           else takeBasePathName path
-  let prefix' = prefix ++ [T.pack deckName]
+  let prefix' = prefList ++ [T.pack deckName]
   deckFiless <- mapM (`constructDeckTree` prefix') filesToProcess
   return $ concat deckFiless
 
 constructDeckTree :: FilePath -> [T.Text] -> IO [DeckFile]
-constructDeckTree path s =
+constructDeckTree path prefList =
   doesDirectoryExist path >>= \case
-    True -> constructDeckTree' path s
-    False -> return [InputFile path (DPos s)]
+    True -> constructDeckTree' path prefList
+    False -> return [InputFile path (DPos prefList)]
 
 parsePankyOption :: String -> Maybe PankyOption
 parsePankyOption "V" = return $ Flag Verbose
@@ -105,6 +105,8 @@ parsePankyOption "-verbose" = return $ Flag Verbose
 parsePankyOption "v" = return $ Flag Version
 parsePankyOption "-version" = return $ Flag Version
 parsePankyOption "-name" = return $ Opt DeckName
+parsePankyOption "-output" = return $ Opt OutputDir
+parsePankyOption "-o" = return $ Opt OutputDir
 parsePankyOption _ = Nothing
 
 parseArgs :: [String] -> [PankyArg]
@@ -130,6 +132,12 @@ main = do
 
   when (PFlag Version `elem` opts) $ putStrLn (showVersion version) *> exitSuccess
 
+  outputDir <- makeAbsolute $ T.unpack $ case [dir | POpt OutputDir dir <- opts] of
+    [] -> "."
+    (dir : _) -> dir
+  let pankyConf = PankyConfig outputDir
+  createDirectoryIfMissing True outputDir
+
   trees <-
     mapM
       ( \sourcePath -> ColDir sourcePath <$> constructDeckTree sourcePath []
@@ -142,6 +150,6 @@ main = do
         ColDir fp [] -> print $ "Skipping invalid input file: " ++ fp ++ " as it is empty"
         ColDir path cds ->
           let colName = T.pack (takeBasePathName path)
-           in handleCol cds colName
+           in handleCol cds colName pankyConf
     )
-    [head trees]
+    trees

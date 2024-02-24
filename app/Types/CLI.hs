@@ -4,8 +4,9 @@ module Types.CLI
     PankyOption (Flag, Opt),
     DeckPos (DPos),
     PankyFlag (Verbose, Version),
-    PankyKWarg (DeckName),
+    PankyKWarg (DeckName, OutputDir),
     CollectionDir (ColDir),
+    PankyConfig (PankyConfig, outputDirPConf),
   )
 where
 
@@ -23,7 +24,9 @@ newtype DeckPos = DPos [T.Text]
 
 -- | Intercalated representation of deck position separated by `::`.
 instance Show DeckPos where
-  show (DPos xs) = T.unpack $ T.intercalate (T.pack "::") xs
+  show (DPos xs) =
+    let prefix = T.unpack $ T.intercalate (T.pack "::") xs
+     in if null prefix then "" else prefix ++ "::"
 
 -- | A file object to be processed as a deck.
 data DeckFile where
@@ -45,6 +48,7 @@ data PankyFlag
 -- | A keyword argument passed to anki-panky from the command line.
 data PankyKWarg
   = DeckName
+  | OutputDir
   deriving (Eq, Show)
 
 -- | Used as a type to distinguish between flags and keyword arguments.
@@ -63,3 +67,7 @@ data PankyArg where
   -- line
   POpt :: PankyKWarg -> T.Text -> PankyArg
   deriving (Eq, Show)
+
+data PankyConfig = PankyConfig
+  { outputDirPConf :: FilePath
+  }

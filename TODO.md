@@ -21,3 +21,5 @@
 - [ ] Look how to properly use the maybe monad so I can do error handling more
   nicerer
 - [x] Use special html to have tags
+- [ ] Make a monad which has the config for the programme as specified from the
+  command line. Lonnnngggggg
