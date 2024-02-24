@@ -48,7 +48,7 @@ handleDeck' conn modelKeys (InputFile path deckPrefix) = do
         DGInfo
           { deckPath = path,
             deckFileName = takeBaseName path,
-            deckName = T.pack (show deckPrefix ++ "::" ++ takeBaseName path),
+            deckName = T.pack (show deckPrefix ++ takeBaseName path),
             deckId = miliEpoc
           }
   input <- LTO.readFile path
@@ -81,7 +81,7 @@ takeBasePathName path = case reverse path of
   _nonDirStylePath -> takeBaseName path
 
 constructDeckTree' :: FilePath -> [T.Text] -> IO [DeckFile]
-constructDeckTree' path prefix = do
+constructDeckTree' path prefList = do
   paths <- listDirectory path
   let specialFiles = [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False]
       filesToProcess = [path </> p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
@@ -89,15 +89,15 @@ constructDeckTree' path prefix = do
         if not (null specialFiles)
           then tail (head specialFiles)
           else takeBasePathName path
-  let prefix' = prefix ++ [T.pack deckName]
+  let prefix' = prefList ++ [T.pack deckName]
   deckFiless <- mapM (`constructDeckTree` prefix') filesToProcess
   return $ concat deckFiless
 
 constructDeckTree :: FilePath -> [T.Text] -> IO [DeckFile]
-constructDeckTree path s =
+constructDeckTree path prefList =
   doesDirectoryExist path >>= \case
-    True -> constructDeckTree' path s
-    False -> return [InputFile path (DPos s)]
+    True -> constructDeckTree' path prefList
+    False -> return [InputFile path (DPos prefList)]
 
 parsePankyOption :: String -> Maybe PankyOption
 parsePankyOption "V" = return $ Flag Verbose
@@ -144,4 +144,4 @@ main = do
           let colName = T.pack (takeBasePathName path)
            in handleCol cds colName
     )
-    [head trees]
+    trees

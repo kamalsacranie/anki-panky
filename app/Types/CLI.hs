@@ -23,7 +23,9 @@ newtype DeckPos = DPos [T.Text]
 
 -- | Intercalated representation of deck position separated by `::`.
 instance Show DeckPos where
-  show (DPos xs) = T.unpack $ T.intercalate (T.pack "::") xs
+  show (DPos xs) =
+    let prefix = T.unpack $ T.intercalate (T.pack "::") xs
+     in if null prefix then "" else prefix ++ "::"
 
 -- | A file object to be processed as a deck.
 data DeckFile where
