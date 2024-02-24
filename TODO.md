@@ -13,11 +13,11 @@
 - [x] make everything lazy
 - [ ] Assign hard-coded model values to models as they are otherwise duplicated
   importing the deck again after regeneration.
-- [ ] Allow notes to be tagged in the markdown file
+- [x] Allow notes to be tagged in the markdown file
 - [ ] Look into builtin pandoc xrefs extension
 - [ ] homogenise the mili epoch times
 - [ ] Finish type implementations for JSON objects
-- [ ] Decouple the renaming of deck from deck rendering
+- [x] Decouple the renaming of deck from deck rendering
 - [ ] Look how to properly use the maybe monad so I can do error handling more
   nicerer
 - [x] Use special html to have tags
