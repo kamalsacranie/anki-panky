@@ -135,6 +135,7 @@ main = do
       ( \sourcePath -> ColDir sourcePath <$> constructDeckTree sourcePath []
       )
       inputSources
+  print $ head trees
 
   when (null trees) $ error "No input files found"
   mapM_
