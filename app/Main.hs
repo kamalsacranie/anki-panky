@@ -15,7 +15,7 @@ import Data.Version (showVersion)
 import Database.SQLite.Simple (Connection)
 import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
-import System.Directory (doesDirectoryExist, listDirectory, makeAbsolute)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
@@ -66,14 +66,14 @@ dbPath = do
   let filepath = temppath </> "collection.anki2"
   return filepath
 
-handleCol :: [DeckFile] -> T.Text -> IO ()
-handleCol deckFiles colName = do
+handleCol :: [DeckFile] -> T.Text -> PankyConfig -> IO ()
+handleCol deckFiles colName pankyConf = do
   dbpath <- dbPath
   c <- createCollectionDb dbpath
   modelKeys <- setupCollectionDb c
   mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
   let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
-  writeDbToApkg mediaDeck colName dbpath
+  writeDbToApkg mediaDeck colName dbpath (outputDirPConf pankyConf)
 
 takeBasePathName :: FilePath -> String
 takeBasePathName path = case reverse path of
@@ -105,6 +105,8 @@ parsePankyOption "-verbose" = return $ Flag Verbose
 parsePankyOption "v" = return $ Flag Version
 parsePankyOption "-version" = return $ Flag Version
 parsePankyOption "-name" = return $ Opt DeckName
+parsePankyOption "-output" = return $ Opt OutputDir
+parsePankyOption "-o" = return $ Opt OutputDir
 parsePankyOption _ = Nothing
 
 parseArgs :: [String] -> [PankyArg]
@@ -130,6 +132,12 @@ main = do
 
   when (PFlag Version `elem` opts) $ putStrLn (showVersion version) *> exitSuccess
 
+  outputDir <- makeAbsolute $ T.unpack $ case [dir | POpt OutputDir dir <- opts] of
+    [] -> "."
+    (dir : _) -> dir
+  let pankyConf = PankyConfig outputDir
+  createDirectoryIfMissing True outputDir
+
   trees <-
     mapM
       ( \sourcePath -> ColDir sourcePath <$> constructDeckTree sourcePath []
@@ -142,6 +150,6 @@ main = do
         ColDir fp [] -> print $ "Skipping invalid input file: " ++ fp ++ " as it is empty"
         ColDir path cds ->
           let colName = T.pack (takeBasePathName path)
-           in handleCol cds colName
+           in handleCol cds colName pankyConf
     )
     trees
