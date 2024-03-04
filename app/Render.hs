@@ -12,6 +12,7 @@ import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
 import Types (DeckMediaSet, MediaItem (DeckMedia), RenderedCard (RCard), RenderedDeck)
 import Types.Parser as P
+import qualified Debug.Trace as Debug
 
 renderMDtoNative :: T.Text -> IO Pandoc
 renderMDtoNative txt = do
@@ -45,14 +46,24 @@ renderDeck = mapM single
   where
     single (f, b, tags) = RCard <$> writeFlashCardHtml f <*> writeFlashCardHtml b <*> pure tags
 
-mediaSetFromBlocks :: [Block] -> FilePath -> State DeckMediaSet [Block]
-mediaSetFromBlocks [] _ = return []
-mediaSetFromBlocks ((Figure a b [Plain [Image c d (url, e)]]) : xs) root = do
+processMedia :: Inline -> FilePath -> State DeckMediaSet Inline
+processMedia (Image a b (url, c)) root = do
   let internalRep = textToIdentifier emptyExtensions url
   let fullUrl = root </> StrictT.unpack url
   modify (Set.insert (DeckMedia fullUrl (T.fromStrict internalRep)))
+  return (Image a b (internalRep, c))
+processMedia _ _ = error "Trying to process an invalide image inline block"
+
+mediaSetFromBlocks :: [Block] -> FilePath -> State DeckMediaSet [Block]
+mediaSetFromBlocks [] _ = return []
+mediaSetFromBlocks ((Figure a b [Plain [img]]) : xs) root = do
+  intRepImg <- Debug.trace (show img) $ processMedia img root
   blocks <- mediaSetFromBlocks xs root
-  return (Figure a b [Plain [Image c d (internalRep, e)]] : blocks)
+  return (Figure a b [Plain [intRepImg]] : blocks)
+mediaSetFromBlocks ((Para [img@(Image {})]) : xs) root = do
+  intRepImg <- Debug.trace (show img) $ processMedia img root
+  blocks <- mediaSetFromBlocks xs root
+  return (Para [intRepImg] : blocks)
 mediaSetFromBlocks (x : xs) root = do
   blocks <- mediaSetFromBlocks xs root
   return (x : blocks)
