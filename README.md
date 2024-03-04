@@ -1,5 +1,9 @@
 <!-- TODO: Make Logo With Project Title underneath -->
 
+<p align="center">
+  <img width="300" align="center" src="./assets/logo.png"/>
+</p>
+
 Anki Panky is a **Pandoc Markdown** to [Anki](https://apps.ankiweb.net)
 ***hierarchical*** flashcard deck generator.
 
@@ -168,4 +172,5 @@ will be "{prefix}::My Deck Name::{subdeck-name}::...etc".
 
 # To be added
 
-- [ ] specify output directory with the `-o`/`--output <path>` option
+- [ ] Close support
+- [ ] Syntax highlighting for code blocks

@@ -1,5 +1,5 @@
 # Revision history for anki-panky
 
-## 0.1.0.0 -- YYYY-mm-dd
+## 0.0.0.2 -- 2024-03-04
 
-* First version. Released on an unsuspecting world.
+* Shiiiiit man. Minimum Viable Product, I guess
