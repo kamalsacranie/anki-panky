@@ -5,10 +5,11 @@
 import Collection.Generate
 import Collection.Utils (handleMeta)
 import Control.Monad.State.Lazy
-import Data.ByteString.Lazy qualified as BL
+import Data.ByteString qualified as BS
 import Data.Functor (($>))
 import Data.Text.Lazy qualified as T
-import Data.Text.Lazy.Encoding (decodeUtf8')
+import Data.Text qualified as TS
+import Data.Text.Encoding (decodeUtf8')
 import Data.Text.Lazy.IO qualified as LTO (readFile)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.Version (showVersion)
@@ -23,22 +24,26 @@ import System.Posix.Temp
 import Types (DeckGenInfo (..), MediaDeck, MediaItem)
 import Types.CLI
 import Utils (splitListOnce)
+import GHC.IO.IOMode (IOMode(ReadMode))
+import System.IO (withBinaryFile)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
-isValidFile :: BL.ByteString -> Bool
+isValidFile :: BS.ByteString -> Bool
 isValidFile input = case decodeUtf8' input of
   Left _ -> False
-  Right res -> case T.unpack res of
+  Right res -> case TS.unpack res of
     ('-' : '-' : '-' : '\n' : _) -> True
     ('#' : ' ' : _) -> True
     _anyOtherFirstLine -> False
 
 handleDeck :: Connection -> [Int] -> DeckFile -> IO [MediaItem]
 handleDeck conn modelKeys dfs@(InputFile path _) = do
-  byteTestInput <- BL.take 1000 <$> BL.readFile path
+  byteTestInput <- withBinaryFile path ReadMode $ \h -> (do
+      BS.take 1000 <$> BS.hGetContents h)
   if isValidFile byteTestInput
-    then handleDeck' conn modelKeys dfs
+    then (do
+      handleDeck' conn modelKeys dfs)
     else return []
 
 handleDeck' :: Connection -> [Int] -> DeckFile -> IO [MediaItem]
