@@ -12,7 +12,8 @@ import Data.Aeson.Key qualified as AK (fromString, toString)
 import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Bifunctor (second)
-import Data.ByteString.Lazy qualified as BS
+import Data.ByteString.Lazy qualified as BL
+import Data.ByteString qualified as BS
 import Data.Char (chr)
 import Data.FileEmbed (embedDir, embedFile)
 import Data.Functor (($>))
@@ -25,6 +26,7 @@ import System.FilePath ((</>))
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), Panky, RenderedCard (RCard), RenderedDeck)
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
+import System.IO (withBinaryFile, IOMode (ReadMode))
 
 addCard :: Int -> Connection -> RenderedCard -> Panky ()
 addCard modelId conn (RCard front back tags) = do
@@ -79,7 +81,7 @@ addCard modelId conn (RCard front back tags) = do
 
 setupCollectionDb :: Connection -> IO [Int]
 setupCollectionDb conn = do
-  let dataFiles = map (second BS.fromStrict) $(embedDir "data")
+  let dataFiles = map (second BL.fromStrict) $(embedDir "data")
   let queries = TE.decodeUtf8 $ fromJust $ lookup "setup-migrations.sql" dataFiles
   let queryString = case reverse $ T.splitOn ";" $ T.replace "\n" "" queries of
         [] -> error "No queries found to run setup migrations"
@@ -138,7 +140,10 @@ setupCollectionDb conn = do
   return modelKeys
 
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
-generateMediaEntry (idx, DeckMedia url _) = toEntry (show idx) . round <$> getPOSIXTime <*> BS.readFile url
+generateMediaEntry (idx, DeckMedia url _) =
+  withBinaryFile url ReadMode $ \h ->
+    BS.hGetContents h >>= return . BL.fromStrict
+    >>= (\x -> toEntry (show idx) . round <$> getPOSIXTime <*> pure x)
 
 writeDbToApkg :: MediaDeck -> T.Text -> FilePath -> FilePath -> IO ()
 writeDbToApkg media colName dbpath outputDir = do
@@ -146,10 +151,10 @@ writeDbToApkg media colName dbpath outputDir = do
   mentry <- mapM generateMediaEntry media
   let mediajson = encode $ AKM.fromList (map (\(inx, DeckMedia _ internalRep) -> (AK.fromString (show inx), internalRep)) media)
   mediajsonFile <- toEntry "media" . round <$> getPOSIXTime <*> pure mediajson
-  cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BS.readFile dbpath
+  cardDB <- toEntry archivePath . round <$> getPOSIXTime <*> BL.readFile dbpath
   let archive = foldl (flip addEntryToArchive) emptyArchive (mediajsonFile : cardDB : mentry)
       archiveName = colName <> ".apkg"
-  BS.writeFile (outputDir </> T.unpack archiveName) $ fromArchive archive
+  BL.writeFile (outputDir </> T.unpack archiveName) $ fromArchive archive
 
 createCollectionDb :: FilePath -> IO Connection
 createCollectionDb dbpath = removeIfExists dbpath *> open dbpath
@@ -160,7 +165,7 @@ addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
 generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
 generateDeck conn modelKeys renderedDeck genInfo = do
   miliEpoc :: Int <- floor . (* 10000) <$> getPOSIXTime
-  let colDeckDefaultRaw = BS.fromStrict $(embedFile "data/default-anki-json/deck.json")
+  let colDeckDefaultRaw = BL.fromStrict $(embedFile "data/default-anki-json/deck.json")
   let colDeckDefault = fromMaybe (error "Could not read default deck.json file") $ decode colDeckDefaultRaw
   let newDeck =
         colDeckDefault
