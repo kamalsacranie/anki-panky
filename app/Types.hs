@@ -1,11 +1,12 @@
 module Types
   ( DeckGenInfo (..),
     DeckMediaSet,
-    Panky,
     MediaItem (..),
     RenderedDeck,
     MediaDeck,
     RenderedCard (RCard),
+    PankyApp,
+    PankyDeck
   )
 where
 
@@ -13,6 +14,7 @@ import Control.Monad.State.Lazy (StateT)
 import Data.Set as Set (Set)
 import Data.Text.Lazy qualified as T
 import Types.Parser (CardTags)
+import Types.CLI (PankyConfig)
 
 data MediaItem where
   DeckMedia :: FilePath -> T.Text -> MediaItem
@@ -22,7 +24,7 @@ type DeckMediaSet = Set.Set MediaItem
 
 type MediaDeck = [(Int, MediaItem)]
 
-type Panky a = StateT DeckGenInfo IO a
+type PankyDeck a = StateT DeckGenInfo IO a
 
 data RenderedCard where
   RCard :: T.Text -> T.Text -> CardTags -> RenderedCard
@@ -38,3 +40,5 @@ data DeckGenInfo where
     } ->
     DeckGenInfo
   deriving (Show)
+
+type PankyApp a = StateT PankyConfig IO a

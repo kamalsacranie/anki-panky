@@ -13,7 +13,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text.Lazy qualified as T
 import System.Directory (doesFileExist, removeFile)
 import Text.Pandoc hiding (getPOSIXTime)
-import Types (DeckGenInfo (deckName), Panky)
+import Types (DeckGenInfo (deckName), PankyDeck)
 import Types.CLI (DeckPos)
 
 metaValueToText :: MetaValue -> Maybe T.Text
@@ -29,7 +29,7 @@ renderMeta metaValue =
         Left _ -> Nothing
         Right res -> Just (T.dropEnd 1 (T.fromStrict res))
 
-handleMeta :: Pandoc -> DeckPos -> Panky ()
+handleMeta :: Pandoc -> DeckPos -> PankyDeck ()
 handleMeta (Pandoc meta _) dpos = do
   let documentName = lookupMeta "name" meta
   modify

@@ -21,7 +21,7 @@ import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
 import System.Posix.Temp
-import Types (DeckGenInfo (..), MediaDeck, MediaItem)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem, PankyApp)
 import Types.CLI
 import Utils (splitListOnce)
 import GHC.IO.IOMode (IOMode(ReadMode))
@@ -71,14 +71,14 @@ dbPath = do
   let filepath = temppath </> "collection.anki2"
   return filepath
 
-handleCol :: [DeckFile] -> T.Text -> PankyConfig -> IO ()
-handleCol deckFiles colName pankyConf = do
-  dbpath <- dbPath
-  c <- createCollectionDb dbpath
-  modelKeys <- setupCollectionDb c
-  mediaFiles <- foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
+handleCol :: [DeckFile] -> T.Text -> PankyApp ()
+handleCol deckFiles colName = do
+  dbpath <- liftIO dbPath
+  c <- liftIO $ createCollectionDb dbpath
+  modelKeys <- liftIO $ setupCollectionDb c
+  mediaFiles <- liftIO $ foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
   let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
-  writeDbToApkg mediaDeck colName dbpath (outputDirPConf pankyConf)
+  writeDbToApkg mediaDeck colName dbpath
 
 takeBasePathName :: FilePath -> String
 takeBasePathName path = case reverse path of
@@ -155,6 +155,6 @@ main = do
         ColDir fp [] -> print $ "Skipping invalid input file: " ++ fp ++ " as it is empty"
         ColDir path cds ->
           let colName = T.pack (takeBasePathName path)
-           in handleCol cds colName pankyConf
+           in runStateT (handleCol cds colName) pankyConf $> ()
     )
     trees
