@@ -20,6 +20,7 @@
 - [x] Decouple the renaming of deck from deck rendering
 - [ ] Look how to properly use the maybe monad so I can do error handling more
   nicerer
+- [ ] Parse CLI args more efficiently
 - [x] Use special html to have tags
-- [ ] Make a monad which has the config for the programme as specified from the
+- [x] Make a monad which has the config for the programme as specified from the
   command line. Lonnnngggggg

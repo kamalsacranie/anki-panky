@@ -16,7 +16,7 @@ import Data.Version (showVersion)
 import Database.SQLite.Simple (Connection)
 import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, makeAbsolute)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, makeAbsolute, doesFileExist)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
@@ -26,6 +26,7 @@ import Types.CLI
 import Utils (splitListOnce)
 import GHC.IO.IOMode (IOMode(ReadMode))
 import System.IO (withBinaryFile)
+import Text.Pandoc (extractMedia)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
@@ -75,7 +76,7 @@ handleCol :: [DeckFile] -> T.Text -> PankyApp ()
 handleCol deckFiles colName = do
   dbpath <- liftIO dbPath
   c <- liftIO $ createCollectionDb dbpath
-  modelKeys <- liftIO $ setupCollectionDb c
+  modelKeys <- setupCollectionDb c
   mediaFiles <- liftIO $ foldM (\mfiles deck -> (mfiles ++) <$> handleDeck c modelKeys deck) [] deckFiles
   let mediaDeck :: MediaDeck = zip [0 :: Int ..] mediaFiles
   writeDbToApkg mediaDeck colName dbpath
@@ -112,6 +113,8 @@ parsePankyOption "-version" = return $ Flag Version
 parsePankyOption "-name" = return $ Opt DeckName
 parsePankyOption "-output" = return $ Opt OutputDir
 parsePankyOption "-o" = return $ Opt OutputDir
+parsePankyOption "+css" = return $ Opt CSSExtend
+parsePankyOption "-css" = return $ Opt CSSOverride
 parsePankyOption _ = Nothing
 
 parseArgs :: [String] -> [PankyArg]
@@ -127,6 +130,34 @@ parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
   Nothing -> error $ "Invalid CLI arg -" ++ optString
 parseArgs (file : xs) = SourcePath file : parseArgs xs
 
+interpretAsTextOrReadFile :: T.Text -> IO T.Text
+interpretAsTextOrReadFile rawTextOrFilePath = doesFileExist fileName >>= (\case
+                                True -> LTO.readFile fileName
+                                False -> return rawTextOrFilePath)
+  where fileName = T.unpack rawTextOrFilePath
+
+constructPankyConfFromArgs :: [PankyArg] -> IO PankyConfig
+constructPankyConfFromArgs opts = do
+  outputDir <- makeAbsolute $ T.unpack $ case [dir | POpt OutputDir dir <- opts] of
+    [] -> "."
+    (dir : _) -> dir
+  -- refactor to be more idiomatic
+  cssExtendRaw <- case [argVal | POpt CSSExtend argVal <- opts] of
+                    [] -> pure ""
+                    (cssExtendArgVal : _) -> interpretAsTextOrReadFile cssExtendArgVal
+  cssOverrideRaw <- case [argVal | POpt CSSOverride argVal <- opts] of
+                    [] -> pure ""
+                    (cssOverrideArgVal : _) -> interpretAsTextOrReadFile cssOverrideArgVal
+  when
+    (cssExtendRaw /= "" && cssOverrideRaw /= "")
+    $ error
+      "Cannot extend the default CSS and override the default CSS simultaneously"
+  return $ PankyConfig {
+      outputDirPConf = outputDir
+    , cssExtendPConf = cssExtendRaw
+    , cssOverridePConf = cssOverrideRaw
+    }
+
 main :: IO ()
 main = do
   rawArgs <- concatMap (splitListOnce '=') <$> getArgs
@@ -137,11 +168,9 @@ main = do
 
   when (PFlag Version `elem` opts) $ putStrLn (showVersion version) *> exitSuccess
 
-  outputDir <- makeAbsolute $ T.unpack $ case [dir | POpt OutputDir dir <- opts] of
-    [] -> "."
-    (dir : _) -> dir
-  let pankyConf = PankyConfig outputDir
-  createDirectoryIfMissing True outputDir
+  pankyConf <- constructPankyConfFromArgs opts
+
+  createDirectoryIfMissing True $ outputDirPConf pankyConf
 
   trees <-
     mapM
