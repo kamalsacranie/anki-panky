@@ -27,7 +27,7 @@ import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), PankyDeck, Ren
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
 import System.IO (withBinaryFile, IOMode (ReadMode))
-import Types.CLI (PankyConfig(outputDirPConf))
+import Types.CLI (PankyConfig(outputDirPConf, cssOverridePConf, cssExtendPConf))
 
 addCard :: Int -> Connection -> RenderedCard -> PankyDeck ()
 addCard modelId conn (RCard front back tags) = do
@@ -80,7 +80,7 @@ addCard modelId conn (RCard front back tags) = do
           dataCard = ""
         }
 
-setupCollectionDb :: Connection -> IO [Int]
+setupCollectionDb :: Connection -> PankyApp [Int]
 setupCollectionDb conn = do
   let dataFiles = map (second BL.fromStrict) $(embedDir "data")
   let queries = TE.decodeUtf8 $ fromJust $ lookup "setup-migrations.sql" dataFiles
@@ -88,16 +88,23 @@ setupCollectionDb conn = do
         [] -> error "No queries found to run setup migrations"
         ("" : xs) -> reverse xs
         commands -> reverse commands
-  mapM_ (execute_ conn . Query . T.toStrict) queryString
+  mapM_ (liftIO . execute_ conn . Query . T.toStrict) queryString
 
   let colMConfDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/conf.json" dataFiles) :: Maybe MConf)
   let colModelDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/models.json" dataFiles) :: Maybe Model)
   let colDConf = TE.decodeUtf8 $ fromJust $ lookup "default-anki-json/dconf.json" dataFiles
-  let cssDefault = TE.decodeUtf8 $ fromJust $ lookup "css/card.css" dataFiles
   let latexPre = TE.decodeUtf8 $ fromJust $ lookup "latex/preamble.tex" dataFiles
   let latexPost = TE.decodeUtf8 $ fromJust $ lookup "latex/postamble.tex" dataFiles
 
-  currTime <- getPOSIXTime
+  -- this is so ugly becuase it relies on logic which is obfuscated all the way in the main file.
+  overrideCss <- gets cssOverridePConf
+  extendCss <- gets cssExtendPConf
+  let cardCSS = if overrideCss /= "" then
+                      overrideCss
+                    else
+                      (TE.decodeUtf8 $ fromJust $ lookup "css/card.css" dataFiles) <> "\n" <> extendCss
+
+  currTime <- liftIO getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
       secEpoc = floor currTime :: Int
 
@@ -105,7 +112,7 @@ setupCollectionDb conn = do
         AKM.fromList
           [ ( AK.fromString $ T.unpack (idModel colModelDefault),
               colModelDefault
-                { cssModel = Just cssDefault,
+                { cssModel = Just cardCSS,
                   didModel = Nothing, -- update the did later
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
@@ -120,7 +127,7 @@ setupCollectionDb conn = do
       modelKeys = read <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
   let colConf = colMConfDefault {curModelMConf = Just $ T.pack (last modelKeyTexts)}
 
-  execute
+  liftIO $ execute
     conn
     (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
     ANS.Col
