@@ -170,7 +170,20 @@ will be "{prefix}::My Deck Name::{subdeck-name}::...etc".
 
 > Note, ***you can have arbitrarily nested directories***
 
+# CLI arguments
+
+- `--verbose` or `-V`: verbose output
+- `--version` or `-v`: output version number
+- `--name`: name the collection output (can only be used when processing one
+  collection)
+- `--output` or `-o`: specify the output directory of the collections^[If the
+  directory doesn't exist, it is automatically created]
+- `-+css` or `--css`: append to the default card CSS or override the card CSS
+  completely. You can either put in **raw CSS** or a **path to a CSS file**.
+
 # To be added
 
 - [ ] Close support
 - [ ] Syntax highlighting for code blocks
+- [ ] Figure out a way to use collection specific CLI arguments for multiple
+  collections

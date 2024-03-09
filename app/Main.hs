@@ -26,7 +26,6 @@ import Types.CLI
 import Utils (splitListOnce)
 import GHC.IO.IOMode (IOMode(ReadMode))
 import System.IO (withBinaryFile)
-import Text.Pandoc (extractMedia)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
@@ -112,7 +111,7 @@ parsePankyOption "v" = return $ Flag Version
 parsePankyOption "-version" = return $ Flag Version
 parsePankyOption "-name" = return $ Opt DeckName
 parsePankyOption "-output" = return $ Opt OutputDir
-parsePankyOption "-o" = return $ Opt OutputDir
+parsePankyOption "o" = return $ Opt OutputDir
 parsePankyOption "+css" = return $ Opt CSSExtend
 parsePankyOption "-css" = return $ Opt CSSOverride
 parsePankyOption _ = Nothing
