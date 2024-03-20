@@ -91,7 +91,7 @@ y} \left( H v_y \right) + \frac{\partial}{\partial z} \left( H v_z \right)
 $$
 ```
 
-If you want a multi-line heading, the you should start the slide with a
+If you want a multi-line heading, then you should start the slide with a
 horizontal rule and then split the slide with the [Pandoc slide pause
 syntax](https://pandoc.org/MANUAL.html#inserting-pauses) as follows:
 
