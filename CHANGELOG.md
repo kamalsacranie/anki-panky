@@ -1,5 +1,9 @@
 # Revision history for anki-panky
 
+## 0.0.0.4 -- 2024-04-30
+
+* Added embedded audio support
+
 ## 0.0.0.3 -- 2024-03-09
 
 * Added syntax highlighting

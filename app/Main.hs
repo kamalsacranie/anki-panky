@@ -7,25 +7,25 @@ import Collection.Utils (handleMeta)
 import Control.Monad.State.Lazy
 import Data.ByteString qualified as BS
 import Data.Functor (($>))
-import Data.Text.Lazy qualified as T
 import Data.Text qualified as TS
 import Data.Text.Encoding (decodeUtf8')
+import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as LTO (readFile)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.Version (showVersion)
 import Database.SQLite.Simple (Connection)
+import GHC.IO.IOMode (IOMode (ReadMode))
 import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, makeAbsolute, doesFileExist)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, makeAbsolute)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
+import System.IO (withBinaryFile)
 import System.Posix.Temp
 import Types (DeckGenInfo (..), MediaDeck, MediaItem, PankyApp)
 import Types.CLI
 import Utils (splitListOnce)
-import GHC.IO.IOMode (IOMode(ReadMode))
-import System.IO (withBinaryFile)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
@@ -39,11 +39,15 @@ isValidFile input = case decodeUtf8' input of
 
 handleDeck :: Connection -> [Int] -> DeckFile -> IO [MediaItem]
 handleDeck conn modelKeys dfs@(InputFile path _) = do
-  byteTestInput <- withBinaryFile path ReadMode $ \h -> (do
-      BS.take 1000 <$> BS.hGetContents h)
+  byteTestInput <- withBinaryFile path ReadMode $ \h ->
+    ( do
+        BS.take 1000 <$> BS.hGetContents h
+    )
   if isValidFile byteTestInput
-    then (do
-      handleDeck' conn modelKeys dfs)
+    then
+      ( do
+          handleDeck' conn modelKeys dfs
+      )
     else return []
 
 handleDeck' :: Connection -> [Int] -> DeckFile -> IO [MediaItem]
@@ -130,10 +134,14 @@ parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
 parseArgs (file : xs) = SourcePath file : parseArgs xs
 
 interpretAsTextOrReadFile :: T.Text -> IO T.Text
-interpretAsTextOrReadFile rawTextOrFilePath = doesFileExist fileName >>= (\case
-                                True -> LTO.readFile fileName
-                                False -> return rawTextOrFilePath)
-  where fileName = T.unpack rawTextOrFilePath
+interpretAsTextOrReadFile rawTextOrFilePath =
+  doesFileExist fileName
+    >>= ( \case
+            True -> LTO.readFile fileName
+            False -> return rawTextOrFilePath
+        )
+  where
+    fileName = T.unpack rawTextOrFilePath
 
 constructPankyConfFromArgs :: [PankyArg] -> IO PankyConfig
 constructPankyConfFromArgs opts = do
@@ -142,20 +150,21 @@ constructPankyConfFromArgs opts = do
     (dir : _) -> dir
   -- refactor to be more idiomatic
   cssExtendRaw <- case [argVal | POpt CSSExtend argVal <- opts] of
-                    [] -> pure ""
-                    (cssExtendArgVal : _) -> interpretAsTextOrReadFile cssExtendArgVal
+    [] -> pure ""
+    (cssExtendArgVal : _) -> interpretAsTextOrReadFile cssExtendArgVal
   cssOverrideRaw <- case [argVal | POpt CSSOverride argVal <- opts] of
-                    [] -> pure ""
-                    (cssOverrideArgVal : _) -> interpretAsTextOrReadFile cssOverrideArgVal
+    [] -> pure ""
+    (cssOverrideArgVal : _) -> interpretAsTextOrReadFile cssOverrideArgVal
   when
     (cssExtendRaw /= "" && cssOverrideRaw /= "")
     $ error
       "Cannot extend the default CSS and override the default CSS simultaneously"
-  return $ PankyConfig {
-      outputDirPConf = outputDir
-    , cssExtendPConf = cssExtendRaw
-    , cssOverridePConf = cssOverrideRaw
-    }
+  return $
+    PankyConfig
+      { outputDirPConf = outputDir,
+        cssExtendPConf = cssExtendRaw,
+        cssOverridePConf = cssOverrideRaw
+      }
 
 main :: IO ()
 main = do
