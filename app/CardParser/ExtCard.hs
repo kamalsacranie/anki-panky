@@ -26,8 +26,9 @@ cardExtFrontBody =
     satisfyBlock
       ( \case
           (Header 1 _ _) -> False
+          HorizontalRule -> False
           Para [Str ".", Space, Str ".", Space, Str "."] -> False
-          _ -> True
+          _validBlock -> True
       )
 
 cardExtendedFront :: Parser Front
