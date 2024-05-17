@@ -20,7 +20,7 @@ name:               anki-panky
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.0.0.5
+version:            0.0.0.6
 
 -- A short (one-line) description of the package.
 -- synopsis:
