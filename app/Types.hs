@@ -6,15 +6,17 @@ module Types
     MediaDeck,
     RenderedCard (RCard),
     PankyApp,
-    PankyDeck
+    PankyDeck,
+    SpecialFileInfo (..),
   )
 where
 
 import Control.Monad.State.Lazy (StateT)
+import Data.Default (Default, def)
 import Data.Set as Set (Set)
 import Data.Text.Lazy qualified as T
-import Types.Parser (CardTags)
 import Types.CLI (PankyConfig)
+import Types.Parser (CardTags)
 
 data MediaItem where
   DeckMedia :: FilePath -> T.Text -> MediaItem
@@ -42,3 +44,14 @@ data DeckGenInfo where
   deriving (Show)
 
 type PankyApp a = StateT PankyConfig IO a
+
+data SpecialFileInfo where
+  SpecialFiles ::
+    { sfPankyIgnoreFile :: Maybe FilePath,
+      sfDeckNameFile :: Maybe String
+    } ->
+    SpecialFileInfo
+  deriving (Show)
+
+instance Default SpecialFileInfo where
+  def = SpecialFiles {sfPankyIgnoreFile = Nothing, sfDeckNameFile = Nothing}
