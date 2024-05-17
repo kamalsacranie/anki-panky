@@ -1,5 +1,13 @@
 # Revision history for anki-panky
 
+## 0.0.0.6
+
+Add `.pankyignore` file to ignore files in decks.
+
+## 0.0.0.5
+
+Bug fixes
+
 ## 0.0.0.4 -- 2024-04-30
 
 * Added embedded audio support

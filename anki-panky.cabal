@@ -20,7 +20,7 @@ name:               anki-panky
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.0.0.4
+version:            0.0.0.5
 
 -- A short (one-line) description of the package.
 -- synopsis:
@@ -84,6 +84,7 @@ executable anki-panky
 
     -- Other library packages from which modules are imported.
     build-depends:  
+        data-default,
         file-embed,
         unix,
         cryptohash-sha256,

@@ -4,9 +4,11 @@
 
 import Collection.Generate
 import Collection.Utils (handleMeta)
-import Control.Monad.State.Lazy
+import Control.Monad.State
 import Data.ByteString qualified as BS
+import Data.Default (def)
 import Data.Functor (($>))
+import Data.Maybe (fromMaybe)
 import Data.Text qualified as TS
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.Lazy qualified as T
@@ -17,13 +19,25 @@ import Database.SQLite.Simple (Connection)
 import GHC.IO.IOMode (IOMode (ReadMode))
 import Paths_anki_panky (version)
 import Render (normaliseAndExtractMedia, renderMDtoNative, renderPandocAsDecks)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, makeAbsolute)
+import System.Directory
+  ( createDirectoryIfMissing,
+    doesDirectoryExist,
+    doesFileExist,
+    listDirectory,
+    makeAbsolute,
+  )
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
 import System.IO (withBinaryFile)
 import System.Posix.Temp
-import Types (DeckGenInfo (..), MediaDeck, MediaItem, PankyApp)
+import Types
+  ( DeckGenInfo (..),
+    MediaDeck,
+    MediaItem,
+    PankyApp,
+    SpecialFileInfo (..),
+  )
 import Types.CLI
 import Utils (splitListOnce)
 
@@ -89,16 +103,32 @@ takeBasePathName path = case reverse path of
   ('/' : rest) -> takeBaseName $ takeDirectory (reverse rest)
   _nonDirStylePath -> takeBaseName path
 
+parseSpecialFile :: FilePath -> State SpecialFileInfo ()
+parseSpecialFile ".pankyignore" = pure ()
+parseSpecialFile ('.' : deckName) = modify (\s -> s {sfDeckNameFile = Just deckName})
+parseSpecialFile _ = pure ()
+
+parseSpecialFiles :: [FilePath] -> State SpecialFileInfo ()
+parseSpecialFiles =
+  foldr ((*>) . parseSpecialFile) (pure ())
+
 constructDeckTree' :: FilePath -> [T.Text] -> IO [DeckFile]
 constructDeckTree' path prefList = do
   paths <- listDirectory path
-  let specialFiles = [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False]
-      filesToProcess = [path </> p | p <- paths, case p of ('.' : _) -> False; _nonSpecialFile -> True]
-  let deckName =
-        if not (null specialFiles)
-          then tail (head specialFiles)
-          else takeBasePathName path
-  let prefix' = prefList ++ [T.pack deckName]
+  specialFiles <-
+    filterM
+      ( \fp -> doesDirectoryExist (path </> fp) >>= (return . not)
+      )
+      [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False]
+
+  filesToIgnore <- if ".pankyignore" `elem` specialFiles then LTO.readFile (path </> ".pankyignore") >>= (return . T.lines) else pure []
+
+  let (_, specialFileInfo) =
+        runState (parseSpecialFiles [p | p <- specialFiles, T.pack p `notElem` filesToIgnore]) def
+  let deckName = fromMaybe (takeBasePathName path) $ sfDeckNameFile specialFileInfo
+      prefix' = prefList ++ [T.pack deckName]
+
+  let filesToProcess = [path </> p | p <- paths, (case p of ('.' : _) -> False; _nonSpecialFile -> True) && notElem (T.pack p) filesToIgnore]
   deckFiless <- mapM (`constructDeckTree` prefix') filesToProcess
   return $ concat deckFiless
 
