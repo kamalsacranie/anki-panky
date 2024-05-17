@@ -176,6 +176,18 @@ will be "{prefix}::My Deck Name::{subdeck-name}::...etc".
 
 > Note, ***you can have arbitrarily nested directories***
 
+# Ignoring files in your collection folder (e.g. README.md)
+
+`anki-panky` infers whether a file is markdown or not based on the first few
+bytes of the file. We aren't locked into using an `.md` extension. If you **want
+to have a file in your directory structure** but **not in the compiled**
+collection, you can use the `.pankyignore` special file.
+
+This file takes the *name* of files to ignore (this works for directories too)
+and, if those files are present **at the same directory level** as the ignore
+file, they will be omitted. You can have as many ignore files as you want in
+your deck structure.
+
 # CLI arguments
 
 - `--verbose` or `-V`: verbose output
