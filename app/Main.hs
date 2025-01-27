@@ -8,6 +8,7 @@ import Control.Monad.State
 import Data.ByteString qualified as BS
 import Data.Default (def)
 import Data.Functor (($>))
+import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as TS
 import Data.Text.Encoding (decodeUtf8')
@@ -27,7 +28,7 @@ import System.Directory
     makeAbsolute,
   )
 import System.Environment (getArgs)
-import System.Exit (exitSuccess)
+import System.Exit (exitFailure, exitSuccess)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
 import System.IO (withBinaryFile)
 import System.Posix.Temp
@@ -138,26 +139,44 @@ constructDeckTree path prefList =
     True -> constructDeckTree' path prefList
     False -> return [InputFile path (DPos prefList)]
 
-parsePankyOption :: String -> Maybe PankyOption
-parsePankyOption "V" = return $ Flag Verbose
-parsePankyOption "-verbose" = return $ Flag Verbose
-parsePankyOption "v" = return $ Flag Version
-parsePankyOption "-version" = return $ Flag Version
-parsePankyOption "-name" = return $ Opt DeckName
-parsePankyOption "-output" = return $ Opt OutputDir
-parsePankyOption "o" = return $ Opt OutputDir
-parsePankyOption "+css" = return $ Opt CSSExtend
-parsePankyOption "-css" = return $ Opt CSSOverride
-parsePankyOption _ = Nothing
+type ArgumentDescription = String
+
+showHelp :: [Char]
+showHelp =
+  let notHelp = (`notElem` ["-help", "h"]) . fst
+      entryToDescription = (\(arg, desc) -> "-" ++ arg ++ ": " ++ desc) . fmap snd
+   in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
+
+parsePankyOption :: [(String, (PankyOption, ArgumentDescription))]
+parsePankyOption =
+  [ ("-version", (Flag Version, versionDescription)),
+    ("v", (Flag Version, versionDescription)),
+    ("-verbose", (Flag Verbose, verboseDescription)),
+    ("V", (Flag Verbose, verboseDescription)),
+    ("-name", (Opt DeckName, nameDescription)),
+    ("-output", (Opt OutputDir, outputDescription)),
+    ("o", (Opt OutputDir, outputDescription)),
+    ("-css", (Opt CSSExtend, extendCssDescription)),
+    ("+css", (Opt CSSOverride, overrideCssDescription)),
+    ("-help", (Flag Help, showHelp)),
+    ("h", (Flag Help, showHelp))
+  ]
+  where
+    versionDescription = "Print version"
+    verboseDescription = "Print verbose output"
+    nameDescription = "Set the name of the deck"
+    outputDescription = "Set the output directory"
+    extendCssDescription = "Extend the default CSS"
+    overrideCssDescription = "Override the default CSS"
 
 parseArgs :: [String] -> [PankyArg]
 parseArgs [] = []
-parseArgs ['-' : optString] = case parsePankyOption optString of
+parseArgs ['-' : optString] = case fst <$> lookup optString parsePankyOption of
   Just (Flag flag) -> [PFlag flag]
   Just (Opt kwarg) -> error $ "Option without value " ++ show kwarg
   Nothing -> error $ "Invalid CLI arg -" ++ optString
 parseArgs [x] = [SourcePath x]
-parseArgs (('-' : optString) : optv : xs) = case parsePankyOption optString of
+parseArgs (('-' : optString) : optv : xs) = case fst <$> lookup optString parsePankyOption of
   Just (Flag flag) -> PFlag flag : parseArgs (optv : xs)
   Just (Opt kwarg) -> POpt kwarg (T.pack optv) : parseArgs xs
   Nothing -> error $ "Invalid CLI arg -" ++ optString
@@ -196,6 +215,9 @@ constructPankyConfFromArgs opts = do
         cssOverridePConf = cssOverrideRaw
       }
 
+useage :: String
+useage = "anki-pany [flags/options] input"
+
 main :: IO ()
 main = do
   rawArgs <- concatMap (splitListOnce '=') <$> getArgs
@@ -204,7 +226,17 @@ main = do
   inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
   let opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
 
-  when (PFlag Version `elem` opts) $ putStrLn (showVersion version) *> exitSuccess
+  when (opts == [PFlag Help]) $
+    putStrLn "Available options for anki-panky are:\n"
+      *> putStrLn useage
+      *> putStrLn showHelp
+      <* exitSuccess
+  when (PFlag Help `elem` opts) $
+    putStrLn "You cannot pass the help flag with any other flags:\n"
+      *> putStrLn useage
+      *> putStrLn showHelp
+      <* exitFailure
+  when (PFlag Version `elem` opts) $ putStrLn (showVersion version) <* exitSuccess
 
   pankyConf <- constructPankyConfFromArgs opts
 
@@ -216,10 +248,14 @@ main = do
       )
       inputSources
 
-  when (null trees) $ error "No input files found"
+  when (null trees) $
+    putStrLn "You must provide one or more input files. Command useage:\n"
+      *> putStrLn useage
+      *> putStrLn showHelp
+      <* exitFailure
   mapM_
     ( \case
-        ColDir fp [] -> print $ "Skipping invalid input file: " ++ fp ++ " as it is empty"
+        ColDir fp [] -> putStrLn $ "Skipping invalid input file: " ++ fp ++ " as it is empty"
         ColDir path cds ->
           let colName = T.pack (takeBasePathName path)
            in runStateT (handleCol cds colName) pankyConf $> ()
