@@ -29,14 +29,15 @@ documenttizeDeck document =
 writeFlashCardHtml :: Pandoc -> IO T.Text
 writeFlashCardHtml p = do
   runIOorExplode $
-    writeHtml5LazyString
-      ( def
-          { writerExtensions = pandocExtensions,
-            writerHTMLMathMethod = MathJax defaultMathJaxURL,
-            writerTemplate = Nothing
-          }
-      )
-      p
+    setVerbosity INFO
+      *> writeHtml5LazyString
+        ( def
+            { writerExtensions = pandocExtensions,
+              writerHTMLMathMethod = MathJax defaultMathJaxURL,
+              writerTemplate = Nothing
+            }
+        )
+        p
   where
     writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
