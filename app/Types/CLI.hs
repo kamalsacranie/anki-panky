@@ -3,7 +3,7 @@ module Types.CLI
     PankyArg (SourcePath, PFlag, POpt),
     PankyOption (Flag, Opt),
     DeckPos (DPos),
-    PankyFlag (Verbose, Version),
+    PankyFlag (Verbose, Version, Help),
     PankyKWarg (DeckName, OutputDir, CSSExtend, CSSOverride),
     CollectionDir (ColDir),
     PankyConfig (PankyConfig, outputDirPConf, cssExtendPConf, cssOverridePConf),
@@ -43,6 +43,7 @@ data CollectionDir where
 data PankyFlag
   = Verbose
   | Version
+  | Help
   deriving (Eq, Show)
 
 -- | A keyword argument passed to anki-panky from the command line.
