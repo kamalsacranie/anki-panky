@@ -202,6 +202,3 @@ your deck structure.
 # To be added
 
 - [ ] Close support
-- [ ] Syntax highlighting for code blocks
-- [ ] Figure out a way to use collection specific CLI arguments for multiple
-  collections

@@ -58,7 +58,7 @@ data PankyKWarg
 data PankyOption where
   Flag :: PankyFlag -> PankyOption
   Opt :: PankyKWarg -> PankyOption
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- | An argument passed to anki-panky from the command line.
 data PankyArg where

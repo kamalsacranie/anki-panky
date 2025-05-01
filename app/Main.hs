@@ -143,7 +143,7 @@ type ArgumentDescription = String
 
 showHelp :: [Char]
 showHelp =
-  let notHelp = (`notElem` ["-help", "h"]) . fst
+  let notHelp = (/= Flag Help) . fst . snd
       entryToDescription = (\(arg, desc) -> "-" ++ arg ++ ": " ++ desc) . fmap snd
    in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
 

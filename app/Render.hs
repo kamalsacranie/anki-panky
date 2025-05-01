@@ -28,16 +28,16 @@ documenttizeDeck document =
 
 writeFlashCardHtml :: Pandoc -> IO T.Text
 writeFlashCardHtml p = do
-  runIOorExplode $
+  runIOorExplode $ do
     setVerbosity INFO
-      *> writeHtml5LazyString
-        ( def
-            { writerExtensions = pandocExtensions,
-              writerHTMLMathMethod = MathJax defaultMathJaxURL,
-              writerTemplate = Nothing
-            }
-        )
-        p
+    writeHtml5LazyString
+      ( def
+          { writerExtensions = pandocExtensions,
+            writerHTMLMathMethod = MathJax defaultMathJaxURL,
+            writerTemplate = Nothing
+          }
+      )
+      p
   where
     writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
@@ -48,7 +48,7 @@ renderDeck = mapM single
 
 processMedia :: Inline -> FilePath -> State DeckMediaSet Inline
 processMedia (Image a b (url, c)) root = do
-  let internalRep = textToIdentifier emptyExtensions url
+  let internalRep = textToIdentifier (extensionsFromList [Ext_gfm_auto_identifiers]) url
   let fullUrl = root </> StrictT.unpack url
   modify (Set.insert (DeckMedia fullUrl (T.fromStrict internalRep)))
   return (Image a b (internalRep, c))
