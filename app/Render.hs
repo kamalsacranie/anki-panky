@@ -15,7 +15,8 @@ import Types.Parser as P
 
 renderMDtoNative :: T.Text -> IO Pandoc
 renderMDtoNative txt = do
-  runIOorExplode $
+  runIOorExplode $ do
+    setVerbosity ERROR
     readMarkdown def {readerExtensions = pandocExtensions, readerStandalone = True, readerStripComments = True} (T.toStrict txt)
 
 documenttizeDeck :: ([Block] -> Pandoc) -> [P.Card] -> [(Pandoc, Pandoc, CardTags)]
@@ -28,16 +29,16 @@ documenttizeDeck document =
 
 writeFlashCardHtml :: Pandoc -> IO T.Text
 writeFlashCardHtml p = do
-  runIOorExplode $
-    setVerbosity INFO
-      *> writeHtml5LazyString
-        ( def
-            { writerExtensions = pandocExtensions,
-              writerHTMLMathMethod = MathJax defaultMathJaxURL,
-              writerTemplate = Nothing
-            }
-        )
-        p
+  runIOorExplode $ do
+    setVerbosity ERROR
+    writeHtml5LazyString
+      ( def
+          { writerExtensions = pandocExtensions,
+            writerHTMLMathMethod = MathJax defaultMathJaxURL,
+            writerTemplate = Nothing
+          }
+      )
+      p
   where
     writeHtml5LazyString wopts doc = T.fromStrict <$> writeHtml5String wopts doc
 
@@ -48,7 +49,7 @@ renderDeck = mapM single
 
 processMedia :: Inline -> FilePath -> State DeckMediaSet Inline
 processMedia (Image a b (url, c)) root = do
-  let internalRep = textToIdentifier emptyExtensions url
+  let internalRep = textToIdentifier (extensionsFromList [Ext_gfm_auto_identifiers]) url
   let fullUrl = root </> StrictT.unpack url
   modify (Set.insert (DeckMedia fullUrl (T.fromStrict internalRep)))
   return (Image a b (internalRep, c))
