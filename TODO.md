@@ -24,3 +24,7 @@
 - [x] Use special html to have tags
 - [x] Make a monad which has the config for the programme as specified from the
   command line. Lonnnngggggg
+- [ ] Look into vendoring only the necessary things from pandoc because right
+  now the build takes so long because pandoc is a massive project
+- [ ] Figure out a way to use collection specific CLI arguments for multiple
+  collections
