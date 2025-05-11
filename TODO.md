@@ -28,3 +28,4 @@
   now the build takes so long because pandoc is a massive project
 - [ ] Figure out a way to use collection specific CLI arguments for multiple
   collections
+- [ ] Automate releases more
