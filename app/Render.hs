@@ -7,7 +7,7 @@ import Control.Monad.State (State, modify, runState)
 import Data.Set qualified as Set
 import Data.Text qualified as StrictT
 import Data.Text.Lazy qualified as T
-import System.FilePath (takeDirectory, (</>))
+import System.FilePath (takeDirectory, (</>), takeExtension, dropExtension)
 import Text.Pandoc hiding (getPOSIXTime)
 import Text.Pandoc.Shared (textToIdentifier)
 import Types (DeckMediaSet, MediaItem (DeckMedia), RenderedCard (RCard), RenderedDeck)
@@ -49,8 +49,10 @@ renderDeck = mapM single
 
 processMedia :: Inline -> FilePath -> State DeckMediaSet Inline
 processMedia (Image a b (url, c)) root = do
-  let internalRep = textToIdentifier (extensionsFromList [Ext_gfm_auto_identifiers]) url
-  let fullUrl = root </> StrictT.unpack url
+  let url' = StrictT.unpack url
+  let internalRep = textToIdentifier (extensionsFromList [Ext_gfm_auto_identifiers]) (StrictT.pack $ dropExtension url')
+                    <> StrictT.pack (takeExtension url')
+  let fullUrl = root </> url'
   modify (Set.insert (DeckMedia fullUrl (T.fromStrict internalRep)))
   return (Image a b (internalRep, c))
 processMedia _ _ = error "Trying to process an invalide image inline block"
