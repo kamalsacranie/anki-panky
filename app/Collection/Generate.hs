@@ -5,8 +5,7 @@ module Collection.Generate where
 
 import Codec.Archive.Zip
 import Collection.Utils (genNoteGuid, removeIfExists)
-import Control.Monad.Cont (MonadIO (liftIO))
-import Control.Monad.State (StateT (runStateT), gets)
+import Control.Monad.State (MonadIO(liftIO), gets, StateT(runStateT))
 import Data.Aeson (decode, decodeStrictText, encode)
 import Data.Aeson.Key qualified as AK (fromString, toString)
 import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
@@ -26,6 +25,7 @@ import System.FilePath ((</>))
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), PankyDeck, RenderedCard (RCard), RenderedDeck, PankyApp)
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
 import Types.Anki.SQL as ANS
+import Utils (todo)
 import System.IO (withBinaryFile, IOMode (ReadMode))
 import Types.CLI (PankyConfig(outputDirPConf, cssOverridePConf, cssExtendPConf))
 
@@ -169,7 +169,7 @@ createCollectionDb :: FilePath -> IO Connection
 createCollectionDb dbpath = removeIfExists dbpath *> open dbpath
 
 addCardsToDeck :: Connection -> [Int] -> RenderedDeck -> PankyDeck ()
-addCardsToDeck c modelKeys = mapM_ (addCard (head modelKeys) c)
+addCardsToDeck c modelKeys = mapM_ (addCard (case modelKeys of [key] -> key; _ -> $(todo "To be figured out when we use more than one model")) c)
 
 generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
 generateDeck conn modelKeys renderedDeck genInfo = do
