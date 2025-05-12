@@ -144,9 +144,10 @@ type ArgumentDescription = String
 
 showHelp :: [Char]
 showHelp =
-  let notHelp = (/= Flag Help) . fst . snd
-      entryToDescription = (\(arg, desc) -> "-" ++ arg ++ ": " ++ desc) . fmap snd
+  let longestFlag = foldr max 0 $ map (length . fst) parsePankyOption
+      entryToDescription = (\(arg, desc) -> replicate (longestFlag - length arg) ' ' <> "-" <> arg <> ": " <> desc) . fmap snd
    in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
+  where notHelp = (/= Flag Help) . fst . snd
 
 parsePankyOption :: [(String, (PankyOption, ArgumentDescription))]
 parsePankyOption =
