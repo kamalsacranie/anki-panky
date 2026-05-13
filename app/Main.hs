@@ -81,9 +81,8 @@ handleDeck' conn modelKeys (InputFile path deckPrefix) = do
   (normalisedDoc, mediaFiles) <- normaliseAndExtractMedia doc path
   renderedDeck <- renderPandocAsDecks normalisedDoc
   (_, genInfo) <- runStateT (handleMeta doc deckPrefix) genInfoDefault
-  if null renderedDeck
-    then print ("Skipping file " ++ path ++ " as it failed to parse its cards") $> []
-    else generateDeck conn modelKeys renderedDeck genInfo $> mediaFiles
+  when (null renderedDeck) $ putStrLn ("Failed to render file `" ++ "`. Aborting... deck only partially created") *> exitFailure
+  generateDeck conn modelKeys renderedDeck genInfo $> mediaFiles
 
 dbPath :: IO FilePath
 dbPath = do
