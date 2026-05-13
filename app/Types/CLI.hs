@@ -4,9 +4,9 @@ module Types.CLI
     PankyOption (Flag, Opt),
     DeckPos (DPos),
     PankyFlag (Verbose, Version, Help),
-    PankyKWarg (DeckName, OutputDir, CSSExtend, CSSOverride),
+    PankyKWarg (DeckName, OutputDir, CssExtend, CssOverride, TemplateFrontHtml, TemplateBackHtml),
     CollectionDir (ColDir),
-    PankyConfig (PankyConfig, outputDirPConf, cssExtendPConf, cssOverridePConf),
+    PankyConfig (PankyConfig, outputDirPConf, cssExtendPConf, cssOverridePConf, fontTemplateHtmlsPConf, backTemplateHtmlsPConf),
   )
 where
 
@@ -50,8 +50,10 @@ data PankyFlag
 data PankyKWarg
   = DeckName
   | OutputDir
-  | CSSExtend
-  | CSSOverride
+  | CssExtend
+  | CssOverride
+  | TemplateFrontHtml
+  | TemplateBackHtml
   deriving (Eq, Show)
 
 -- | Used as a type to distinguish between flags and keyword arguments.
@@ -74,5 +76,7 @@ data PankyArg where
 data PankyConfig = PankyConfig
   { outputDirPConf :: FilePath,
     cssExtendPConf :: T.Text,
-    cssOverridePConf :: T.Text
+    cssOverridePConf :: T.Text,
+    fontTemplateHtmlsPConf :: [T.Text],
+    backTemplateHtmlsPConf :: [T.Text]
   }

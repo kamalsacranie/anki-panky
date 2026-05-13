@@ -10,7 +10,7 @@ import Data.ByteString qualified as BS
 import Data.Default (def)
 import Data.Functor (($>))
 import Data.List (intercalate)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text qualified as TS
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.Lazy qualified as T
@@ -140,7 +140,6 @@ constructDeckTree path prefList =
     True -> constructDeckTree' path prefList
     False -> return [InputFile path (DPos prefList)]
 
-type ArgumentDescription = String
 
 showHelp :: [Char]
 showHelp =
@@ -149,6 +148,7 @@ showHelp =
    in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
   where notHelp = (/= Flag Help) . fst . snd
 
+type ArgumentDescription = String
 parsePankyOption :: [(String, (PankyOption, ArgumentDescription))]
 parsePankyOption =
   [ ("-version", (Flag Version, versionDescription)),
@@ -158,8 +158,10 @@ parsePankyOption =
     ("-name", (Opt DeckName, nameDescription)),
     ("-output", (Opt OutputDir, outputDescription)),
     ("o", (Opt OutputDir, outputDescription)),
-    ("-css", (Opt CSSExtend, extendCssDescription)),
-    ("+css", (Opt CSSOverride, overrideCssDescription)),
+    ("+css", (Opt CssExtend, extendCssDescription)),
+    ("-css", (Opt CssOverride, overrideCssDescription)),
+    ("-template-front", (Opt TemplateFrontHtml, templateDescription "front")),
+    ("-template-back", (Opt TemplateBackHtml, templateDescription "back")),
     ("-help", (Flag Help, showHelp)),
     ("h", (Flag Help, showHelp))
   ]
@@ -170,6 +172,7 @@ parsePankyOption =
     outputDescription = "Set the output directory"
     extendCssDescription = "Extend the default CSS"
     overrideCssDescription = "Override the default CSS"
+    templateDescription side = "Specify the " <> side <> " html template for the nth template in the Panky model, where n corresponds to the number of times this argument has been used."
 
 parseArgs :: [String] -> [PankyArg]
 parseArgs [] = []
@@ -196,26 +199,25 @@ interpretAsTextOrReadFile rawTextOrFilePath =
 
 constructPankyConfFromArgs :: [PankyArg] -> IO PankyConfig
 constructPankyConfFromArgs opts = do
-  outputDir <- makeAbsolute $ T.unpack $ case [dir | POpt OutputDir dir <- opts] of
-    [] -> "."
-    (dir : _) -> dir
-  -- refactor to be more idiomatic
-  cssExtendRaw <- case [argVal | POpt CSSExtend argVal <- opts] of
-    [] -> pure ""
-    (cssExtendArgVal : _) -> interpretAsTextOrReadFile cssExtendArgVal
-  cssOverrideRaw <- case [argVal | POpt CSSOverride argVal <- opts] of
-    [] -> pure ""
-    (cssOverrideArgVal : _) -> interpretAsTextOrReadFile cssOverrideArgVal
-  when
-    (cssExtendRaw /= "" && cssOverrideRaw /= "")
-    $ error
-      "Cannot extend the default CSS and override the default CSS simultaneously"
+  outputDir <- makeAbsolute $ maybe "." T.unpack (getFirstMatchingKwargText OutputDir)
+  cssExtendRaw <- maybe (pure (T.pack "")) interpretAsTextOrReadFile (getFirstMatchingKwargText CssExtend)
+  cssOverrideRaw <- maybe (pure (T.pack "")) interpretAsTextOrReadFile (getFirstMatchingKwargText CssOverride)
+  fontTemplateHtmlRaws <- mapM interpretAsTextOrReadFile (getAlltMatchingKwargTexts TemplateFrontHtml)
+  backTemplateHtmlRaws <- mapM interpretAsTextOrReadFile (getAlltMatchingKwargTexts TemplateBackHtml)
   return $
     PankyConfig
       { outputDirPConf = outputDir,
         cssExtendPConf = cssExtendRaw,
-        cssOverridePConf = cssOverrideRaw
+        cssOverridePConf = cssOverrideRaw,
+        fontTemplateHtmlsPConf = fontTemplateHtmlRaws,
+        backTemplateHtmlsPConf = backTemplateHtmlRaws
       }
+  where
+    getAlltMatchingKwargTexts :: PankyKWarg -> [T.Text]
+    getAlltMatchingKwargTexts kwargToMatch = [text | POpt kwarg text <- opts, kwargToMatch == kwarg]
+
+    getFirstMatchingKwargText :: PankyKWarg -> Maybe T.Text
+    getFirstMatchingKwargText = listToMaybe . getAlltMatchingKwargTexts
 
 useage :: String
 useage = "anki-pany [flags/options] input"
