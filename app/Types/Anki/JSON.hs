@@ -4,6 +4,7 @@ module Types.Anki.JSON
     Model (..),
     Models,
     MConf (..),
+    Template (..),
   )
 where
 

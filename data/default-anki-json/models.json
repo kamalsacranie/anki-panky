@@ -35,7 +35,7 @@
     "latexPre": null,
     "latexsvg": false,
     "mod": null,
-    "name": "Panky Default",
+    "name": "Panky",
     "req": [
         [
             0,
@@ -49,7 +49,7 @@
     "tags": [],
     "tmpls": [
         {
-            "name": "Card 1",
+            "name": "Panky Card",
             "qfmt": "<div class=\"card\"><div class=\"question\">{{Question}}</div></div>",
             "afmt": "<div class=\"card\"><div class=\"question\">{{Question}}</div><hr><div class=\"answer\">{{Answer}}</div></div>",
             "ord": 0,

@@ -16,18 +16,20 @@ import Data.ByteString qualified as BS
 import Data.Char (chr)
 import Data.FileEmbed (embedDir, embedFile)
 import Data.Functor (($>))
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust, fromMaybe, listToMaybe)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.Encoding qualified as TE
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.FilePath ((</>))
 import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), PankyDeck, RenderedCard (RCard), RenderedDeck, PankyApp)
-import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models)
+import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models, Template (..))
 import Types.Anki.SQL as ANS
 import Utils (todo)
 import System.IO (withBinaryFile, IOMode (ReadMode))
-import Types.CLI (PankyConfig(outputDirPConf, cssOverridePConf, cssExtendPConf))
+import Types.CLI (PankyConfig(outputDirPConf, cssOverridePConf, cssExtendPConf, fontTemplateHtmlsPConf, backTemplateHtmlsPConf))
+import Data.Bifunctor.Compat (bimap)
+import Control.Monad (join)
 
 addCard :: Int -> Connection -> RenderedCard -> PankyDeck ()
 addCard modelId conn (RCard front back tags) = do
@@ -90,23 +92,33 @@ setupCollectionDb conn = do
         commands -> reverse commands
   mapM_ (liftIO . execute_ conn . Query . T.toStrict) queryString
 
-  let colMConfDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/conf.json" dataFiles) :: Maybe MConf)
-  let colModelDefault = fromJust $ (decode (fromJust $ lookup "default-anki-json/models.json" dataFiles) :: Maybe Model)
+  let colMConfDefault = fromJust (decode (fromJust $ lookup "default-anki-json/conf.json" dataFiles) :: Maybe MConf)
+  let colModelDefault = fromJust (decode (fromJust $ lookup "default-anki-json/models.json" dataFiles) :: Maybe Model)
   let colDConf = TE.decodeUtf8 $ fromJust $ lookup "default-anki-json/dconf.json" dataFiles
   let latexPre = TE.decodeUtf8 $ fromJust $ lookup "latex/preamble.tex" dataFiles
   let latexPost = TE.decodeUtf8 $ fromJust $ lookup "latex/postamble.tex" dataFiles
 
-  -- this is so ugly becuase it relies on logic which is obfuscated all the way in the main file.
   overrideCss <- gets cssOverridePConf
   extendCss <- gets cssExtendPConf
-  let cardCSS = if overrideCss /= "" then
-                      overrideCss
-                    else
-                      (TE.decodeUtf8 $ fromJust $ lookup "css/card.css" dataFiles) <> "\n" <> extendCss
+  let cardCSS = (if overrideCss /= "" then overrideCss else TE.decodeUtf8 (fromJust $ lookup "css/card.css" dataFiles))
+                  <> "\n" <> extendCss
 
   currTime <- liftIO getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
       secEpoc = floor currTime :: Int
+
+  frontHtmls <- gets fontTemplateHtmlsPConf
+  backHtmls <- gets backTemplateHtmlsPConf
+
+  let htmlTemplates = takeWhile (\case (Nothing, Nothing) -> False; _ -> True) (uncurry zip $ join bimap ((++ repeat Nothing) . (<$>) Just) (frontHtmls, backHtmls))
+  let defaultTemplate = (fromJust . listToMaybe) (tmplsModel colModelDefault)
+  let templates = if null htmlTemplates then [defaultTemplate] else
+                    zipWith (\idx (frontTemplate, backTemplate) ->
+                        defaultTemplate { qfmtTemplate = maybe (qfmtTemplate defaultTemplate) T.unpack frontTemplate,
+                          afmtTemplate = maybe (afmtTemplate defaultTemplate) T.unpack backTemplate,
+                          nameTemplate = "Panky Template " ++ show idx
+                          }
+                    ) [0 :: Integer ..] htmlTemplates
 
   let colModels =
         AKM.fromList
@@ -117,7 +129,8 @@ setupCollectionDb conn = do
                   latexPreModel = Just latexPre,
                   latexPostModel = Just latexPost,
                   modModel = Just secEpoc,
-                  typeModel = Just 0
+                  typeModel = Just 0,
+                  tmplsModel = templates
                 }
             )
           ] ::
