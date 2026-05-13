@@ -198,6 +198,10 @@ your deck structure.
   directory doesn't exist, it is automatically created]
 - `-+css` or `--css`: append to the default card CSS or override the card CSS
   completely. You can either put in **raw CSS** or a **path to a CSS file**.
+- `--template-front`: override the card's front html template
+- `--template-back`: override the card's back html template
+  - For both of these, you have access to builtin anki fields like `{{Deck}}`
+    (see [here](https://docs.ankiweb.net/templates/fields.html#special-fields))
 
 # To be added
 
