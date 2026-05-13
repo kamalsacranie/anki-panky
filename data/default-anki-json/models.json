@@ -35,16 +35,8 @@
     "latexPre": null,
     "latexsvg": false,
     "mod": null,
-    "name": "Panky",
-    "req": [
-        [
-            0,
-            "all",
-            [
-                0
-            ]
-        ]
-    ],
+    "name": "Panky Default",
+    "req": [],
     "sortf": 0,
     "tags": [],
     "tmpls": [

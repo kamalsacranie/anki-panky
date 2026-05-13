@@ -5,14 +5,16 @@ module Collection.Generate where
 
 import Codec.Archive.Zip
 import Collection.Utils (genNoteGuid, removeIfExists)
-import Control.Monad.State (MonadIO(liftIO), gets, StateT(runStateT))
+import Control.Monad (join)
+import Control.Monad.State (MonadIO (liftIO), StateT (runStateT), gets)
 import Data.Aeson (decode, decodeStrictText, encode)
 import Data.Aeson.Key qualified as AK (fromString, toString)
-import Data.Aeson.KeyMap qualified as AKM (fromList, insert, keys)
+import Data.Aeson.KeyMap qualified as AKM (elems, fromList, insert, keys)
 import Data.Aeson.Text (encodeToLazyText)
 import Data.Bifunctor (second)
-import Data.ByteString.Lazy qualified as BL
+import Data.Bifunctor.Compat (bimap)
 import Data.ByteString qualified as BS
+import Data.ByteString.Lazy qualified as BL
 import Data.Char (chr)
 import Data.FileEmbed (embedDir, embedFile)
 import Data.Functor (($>))
@@ -22,17 +24,44 @@ import Data.Text.Lazy.Encoding qualified as TE
 import Data.Time.Clock.POSIX
 import Database.SQLite.Simple
 import System.FilePath ((</>))
-import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), PankyDeck, RenderedCard (RCard), RenderedDeck, PankyApp)
+import System.IO (IOMode (ReadMode), withBinaryFile)
+import Types (DeckGenInfo (..), MediaDeck, MediaItem (DeckMedia), PankyApp, PankyDeck, RenderedCard (RCard), RenderedDeck)
 import Types.Anki.JSON (Deck (..), Decks, MConf (..), Model (..), Models, Template (..))
 import Types.Anki.SQL as ANS
+import Types.CLI (PankyConfig (backTemplateHtmlsPConf, cssExtendPConf, cssOverridePConf, fontTemplateHtmlsPConf, outputDirPConf))
 import Utils (todo)
-import System.IO (withBinaryFile, IOMode (ReadMode))
-import Types.CLI (PankyConfig(outputDirPConf, cssOverridePConf, cssExtendPConf, fontTemplateHtmlsPConf, backTemplateHtmlsPConf))
-import Data.Bifunctor.Compat (bimap)
-import Control.Monad (join)
 
-addCard :: Int -> Connection -> RenderedCard -> PankyDeck ()
-addCard modelId conn (RCard front back tags) = do
+addCard :: Int -> Int -> Connection -> PankyDeck ()
+addCard noteId templateOrd conn = do
+  cardId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
+  dId <- gets deckId
+  liftIO $
+    execute
+      conn
+      "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      ANS.Card
+        { idCard = cardId,
+          nidCard = noteId,
+          didCard = dId,
+          ordCard = templateOrd,
+          modCard = cardId `div` 10000, -- time the card was modified
+          usnCard = -1,
+          typeCard = 0,
+          queueCard = 0,
+          dueCard = 0,
+          ivlCard = 0,
+          factorCard = 0,
+          repsCard = 0,
+          lapsesCard = 0,
+          leftCard = 0,
+          odueCard = 0,
+          odidCard = 0,
+          flagsCard = 0,
+          dataCard = ""
+        }
+
+addNote :: Int -> Connection -> RenderedCard -> PankyDeck (Int)
+addNote modelId conn (RCard front back tags) = do
   noteGUID <- gets ((\dn -> genNoteGuid (T.unpack dn) (T.unpack front) []) . deckName)
 
   -- technically these should be miliseconds but its not fast enought
@@ -54,33 +83,7 @@ addCard modelId conn (RCard front back tags) = do
           flagsNote = 0,
           dataNote = ""
         }
-
-  cardId <- liftIO $ floor . (* 10000) <$> getPOSIXTime
-  dId <- gets deckId
-  liftIO $
-    execute
-      conn
-      "INSERT INTO cards VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-      ANS.Card
-        { idCard = cardId,
-          nidCard = noteId,
-          didCard = dId,
-          ordCard = 0,
-          modCard = cardId `div` 10000, -- time the card was modified
-          usnCard = -1,
-          typeCard = 0,
-          queueCard = 0,
-          dueCard = 0,
-          ivlCard = 0,
-          factorCard = 0,
-          repsCard = 0,
-          lapsesCard = 0,
-          leftCard = 0,
-          odueCard = 0,
-          odidCard = 0,
-          flagsCard = 0,
-          dataCard = ""
-        }
+  return noteId
 
 setupCollectionDb :: Connection -> PankyApp [Int]
 setupCollectionDb conn = do
@@ -100,8 +103,10 @@ setupCollectionDb conn = do
 
   overrideCss <- gets cssOverridePConf
   extendCss <- gets cssExtendPConf
-  let cardCSS = (if overrideCss /= "" then overrideCss else TE.decodeUtf8 (fromJust $ lookup "css/card.css" dataFiles))
-                  <> "\n" <> extendCss
+  let cardCSS =
+        (if overrideCss /= "" then overrideCss else TE.decodeUtf8 (fromJust $ lookup "css/card.css" dataFiles))
+          <> "\n"
+          <> extendCss
 
   currTime <- liftIO getPOSIXTime
   let miliEpoc = floor $ currTime * 1000 :: Int
@@ -112,13 +117,21 @@ setupCollectionDb conn = do
 
   let htmlTemplates = takeWhile (\case (Nothing, Nothing) -> False; _ -> True) (uncurry zip $ join bimap ((++ repeat Nothing) . (<$>) Just) (frontHtmls, backHtmls))
   let defaultTemplate = (fromJust . listToMaybe) (tmplsModel colModelDefault)
-  let templates = if null htmlTemplates then [defaultTemplate] else
-                    zipWith (\idx (frontTemplate, backTemplate) ->
-                        defaultTemplate { qfmtTemplate = maybe (qfmtTemplate defaultTemplate) T.unpack frontTemplate,
-                          afmtTemplate = maybe (afmtTemplate defaultTemplate) T.unpack backTemplate,
-                          nameTemplate = "Panky Template " ++ show idx
-                          }
-                    ) [0 :: Integer ..] htmlTemplates
+  let templates =
+        if null htmlTemplates
+          then [defaultTemplate]
+          else
+            zipWith
+              ( \idx (frontTemplate, backTemplate) ->
+                  defaultTemplate
+                    { qfmtTemplate = maybe (qfmtTemplate defaultTemplate) T.unpack frontTemplate,
+                      afmtTemplate = maybe (afmtTemplate defaultTemplate) T.unpack backTemplate,
+                      nameTemplate = "Panky Template " ++ show idx,
+                      ordTemplate = idx
+                    }
+              )
+              [0 ..]
+              htmlTemplates
 
   let colModels =
         AKM.fromList
@@ -140,31 +153,30 @@ setupCollectionDb conn = do
       modelKeys = read <$> modelKeyTexts :: [Int] -- couldn't get show to wrok here
   let colConf = colMConfDefault {curModelMConf = Just $ T.pack (last modelKeyTexts)}
 
-  liftIO $ execute
-    conn
-    (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    ANS.Col
-      { idCol = 1,
-        crtCol = secEpoc,
-        modCol = miliEpoc,
-        scmCol = miliEpoc,
-        verCol = 11,
-        dtyCol = 0, -- All collections generated will be clean
-        usnCol = 0,
-        lsCol = 0, -- last sync time, not important for a new deck
-        confCol = encodeToLazyText colConf, -- config
-        modelsCol = encodeToLazyText colModels,
-        decksCol = "{}",
-        dconfCol = colDConf,
-        tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
-      }
+  liftIO $
+    execute
+      conn
+      (Query "INSERT INTO col VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      ANS.Col
+        { idCol = 1,
+          crtCol = secEpoc,
+          modCol = miliEpoc,
+          scmCol = miliEpoc,
+          verCol = 11,
+          dtyCol = 0, -- All collections generated will be clean
+          usnCol = 0,
+          lsCol = 0, -- last sync time, not important for a new deck
+          confCol = encodeToLazyText colConf, -- config
+          modelsCol = encodeToLazyText colModels,
+          decksCol = "{}",
+          dconfCol = colDConf,
+          tagsCol = "{}" -- todo, investigate how these tags are used (don't think there are any)
+        }
   return modelKeys
 
 generateMediaEntry :: (Int, MediaItem) -> IO Entry
 generateMediaEntry (idx, DeckMedia url _) =
-  withBinaryFile url ReadMode $ \h ->
-    BS.hGetContents h >>= return . BL.fromStrict
-    >>= (\x -> toEntry (show idx) . round <$> getPOSIXTime <*> pure x)
+  withBinaryFile url ReadMode $ \h -> toEntry (show idx) . round <$> getPOSIXTime <*> (BL.fromStrict <$> BS.hGetContents h)
 
 writeDbToApkg :: MediaDeck -> T.Text -> FilePath -> PankyApp ()
 writeDbToApkg media colName dbpath = do
@@ -180,9 +192,6 @@ writeDbToApkg media colName dbpath = do
 
 createCollectionDb :: FilePath -> IO Connection
 createCollectionDb dbpath = removeIfExists dbpath *> open dbpath
-
-addCardsToDeck :: Connection -> [Int] -> RenderedDeck -> PankyDeck ()
-addCardsToDeck c modelKeys = mapM_ (addCard (case modelKeys of [key] -> key; _ -> $(todo "To be figured out when we use more than one model")) c)
 
 generateDeck :: Connection -> [Int] -> RenderedDeck -> DeckGenInfo -> IO ()
 generateDeck conn modelKeys renderedDeck genInfo = do
@@ -205,4 +214,16 @@ generateDeck conn modelKeys renderedDeck genInfo = do
           (decodeStrictText $ T.toStrict decksResult)
       appendedDecks = AKM.insert (AK.fromString (show (deckId genInfo))) newDeck decks
   execute conn (Query "UPDATE col SET decks = ?") (Only $ encodeToLazyText appendedDecks)
-  runStateT (addCardsToDeck conn modelKeys renderedDeck) genInfo $> ()
+
+  [[modelsResult :: T.Text]] <- query_ conn (Query "SELECT models FROM col")
+  let models :: Models =
+        fromMaybe
+          (error "Could not read models field from collection DB table")
+          (decodeStrictText $ T.toStrict modelsResult)
+  let templateOrds = map ordTemplate $ tmplsModel $ fromJust $ listToMaybe $ AKM.elems models
+
+  runStateT (do
+        noteIds <- mapM (addNote (case modelKeys of [key] -> key; _ -> $(todo "To be figured out when we use more than one model")) conn) renderedDeck
+        mapM_ (\noteId -> mapM_ (\templateOrd -> addCard noteId templateOrd conn) templateOrds) noteIds
+    ) genInfo $> ()
+
