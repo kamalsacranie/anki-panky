@@ -4,8 +4,8 @@
 
 import Collection.Generate
 import Collection.Utils (handleMeta)
-import Control.Monad.State (MonadIO(liftIO), StateT(runStateT), modify, runState, State)
-import Control.Monad (when, filterM, foldM)
+import Control.Monad (filterM, foldM, when)
+import Control.Monad.State (MonadIO (liftIO), State, StateT (runStateT), modify, runState)
 import Data.ByteString qualified as BS
 import Data.Default (def)
 import Data.Functor (($>))
@@ -119,8 +119,7 @@ constructDeckTree' path prefList = do
   paths <- listDirectory path
   specialFiles <-
     filterM
-      ( \fp -> doesDirectoryExist (path </> fp) >>= (return . not)
-      )
+      (\fp -> doesDirectoryExist (path </> fp) >>= (return . not))
       [p | p <- paths, case p of ('.' : _) -> True; _nonSpecial -> False]
 
   filesToIgnore <- if ".pankyignore" `elem` specialFiles then LTO.readFile (path </> ".pankyignore") >>= (return . T.lines) else pure []
@@ -140,15 +139,16 @@ constructDeckTree path prefList =
     True -> constructDeckTree' path prefList
     False -> return [InputFile path (DPos prefList)]
 
-
 showHelp :: [Char]
 showHelp =
   let longestFlag = foldr max 0 $ map (length . fst) parsePankyOption
       entryToDescription = (\(arg, desc) -> replicate (longestFlag - length arg) ' ' <> "-" <> arg <> ": " <> desc) . fmap snd
    in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
-  where notHelp = (/= Flag Help) . fst . snd
+  where
+    notHelp = (/= Flag Help) . fst . snd
 
 type ArgumentDescription = String
+
 parsePankyOption :: [(String, (PankyOption, ArgumentDescription))]
 parsePankyOption =
   [ ("-version", (Flag Version, versionDescription)),
@@ -248,8 +248,7 @@ main = do
 
   trees <-
     mapM
-      ( \sourcePath -> ColDir sourcePath <$> constructDeckTree sourcePath []
-      )
+      (\sourcePath -> ColDir sourcePath <$> constructDeckTree sourcePath [])
       inputSources
 
   when (null trees) $
