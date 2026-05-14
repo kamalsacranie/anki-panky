@@ -41,7 +41,6 @@ import Types
     SpecialFileInfo (..),
   )
 import Types.CLI
-import Utils (splitListOnce)
 
 -- | Checks if the input file is a valid deck file
 -- | TODO: Change this implementation to handle an IO exception with readFile from Lazy Text
@@ -140,16 +139,16 @@ constructDeckTree path prefList =
 
 showHelp :: [Char]
 showHelp =
-  let longestFlag = foldr max 0 $ map (length . fst) parsePankyOption
+  let longestFlag = foldr max 0 $ map (length . fst) pankyOptionTuples
       entryToDescription = (\(arg, desc) -> replicate (longestFlag - length arg) ' ' <> "-" <> arg <> ": " <> desc) . fmap snd
-   in (intercalate "\n" . map entryToDescription) (filter notHelp parsePankyOption)
+   in (intercalate "\n" . map entryToDescription) (filter notHelp pankyOptionTuples)
   where
     notHelp = (/= Flag Help) . fst . snd
 
 type ArgumentDescription = String
 
-parsePankyOption :: [(String, (PankyOption, ArgumentDescription))]
-parsePankyOption =
+pankyOptionTuples :: [(String, (PankyOption, ArgumentDescription))]
+pankyOptionTuples =
   [ ("-version", (Flag Version, versionDescription)),
     ("v", (Flag Version, versionDescription)),
     ("-verbose", (Flag Verbose, verboseDescription)),
@@ -175,16 +174,28 @@ parsePankyOption =
 
 parseArgs :: [String] -> [PankyArg]
 parseArgs [] = []
-parseArgs ['-' : optString] = case fst <$> lookup optString parsePankyOption of
-  Just (Flag flag) -> [PFlag flag]
-  Just (Opt kwarg) -> error $ "Option without value " ++ show kwarg
-  Nothing -> error $ "Invalid CLI arg -" ++ optString
-parseArgs [x] = [SourcePath x]
-parseArgs (('-' : optString) : optv : xs) = case fst <$> lookup optString parsePankyOption of
-  Just (Flag flag) -> PFlag flag : parseArgs (optv : xs)
-  Just (Opt kwarg) -> POpt kwarg (T.pack optv) : parseArgs xs
-  Nothing -> error $ "Invalid CLI arg -" ++ optString
-parseArgs (file : xs) = SourcePath file : parseArgs xs
+parseArgs (('-' : rest) : xs) =
+  processOption rest xs
+parseArgs (path : xs) =
+  SourcePath path : parseArgs xs
+
+processOption :: String -> [String] -> [PankyArg]
+processOption opt xs =
+  case break (== '=') opt of
+    (optName, '=' : val) ->
+      case fst <$> lookup optName pankyOptionTuples of
+        Just (Opt kwarg) -> POpt kwarg (T.pack val) : parseArgs xs
+        Just (Flag _) -> error $ "Flag -" ++ opt ++ " should not have a value."
+        Nothing -> error $ "Invalid CLI arg: -" ++ opt
+    (optName, "") ->
+      case fst <$> lookup optName pankyOptionTuples of
+        Just (Flag flag) -> PFlag flag : parseArgs xs
+        Just (Opt kwarg) ->
+          case xs of
+            (val : rest) -> POpt kwarg (T.pack val) : parseArgs rest
+            [] -> error $ "Option -" ++ opt ++ " requires a value."
+        Nothing -> error $ "Invalid CLI arg: -" ++ opt
+    _ -> error $ "Invalid CLI arg: -" ++ opt
 
 interpretAsTextOrReadFile :: T.Text -> IO T.Text
 interpretAsTextOrReadFile rawTextOrFilePath =
@@ -223,8 +234,7 @@ useage = "anki-pany [flags/options] input"
 
 main :: IO ()
 main = do
-  rawArgs <- concatMap (splitListOnce '=') <$> getArgs
-  let args = parseArgs rawArgs
+  args <- parseArgs <$> getArgs
 
   inputSources <- mapM makeAbsolute [source | SourcePath source <- args]
   let opts = [arg | arg <- args, (case arg of SourcePath _ -> False; _nonFileArg -> True)]
