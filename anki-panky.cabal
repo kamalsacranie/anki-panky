@@ -1,4 +1,4 @@
-cabal-version:      3.14
+cabal-version:      3.8
 -- The cabal-version field refers to the version of the .cabal specification,
 -- and can be different from the cabal-install (the tool) version and the
 -- Cabal (the library) version you are using. As such, the Cabal (the library)
@@ -94,6 +94,7 @@ executable anki-panky
         containers,
         random,
         zip-archive,
+        zlib,
         directory,
         bytestring,
         base-compat,
@@ -104,7 +105,7 @@ executable anki-panky
         text,
         pandoc-types,
         pandoc,
-        base,
+        base ==4.20.0.0,
         template-haskell
 
     -- Directories containing source files.

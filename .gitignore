@@ -27,3 +27,4 @@ cabal.project.local~
 
 **/*.anki2
 **/*.apkg
+result
